@@ -25,4 +25,7 @@ api_router.include_router(capacity_router)
 
 api_router.include_router(orders_router)
 from app.modules.voice_notes.router import router as voice_notes_router
+from app.modules.review.router import router as review_router
 api_router.include_router(voice_notes_router)
+
+api_router.include_router(review_router)

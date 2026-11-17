@@ -46,7 +46,15 @@ def patch_order(db: Session, scope: TenantScope, order_id: UUID,
         raise HTTPException(status_code=409, detail="Solo se pueden editar borradores")
     if role != "owner" and order.created_by_user_id != scope.actor_id:
         raise HTTPException(status_code=403, detail="Solo puedes editar tus propias solicitudes")
+    # Cambiar la solicitud invalida cualquier revision anterior.
     order.raw_text = payload.raw_text
+    order.suggested_quantity = None
+    order.suggested_due_date = None
+    order.reviewed_quantity = None
+    order.reviewed_due_date = None
+    order.reviewed_by_user_id = None
+    order.reviewed_at = None
+    order.review_revision += 1
     db.commit()
     db.refresh(order)
     return order

@@ -252,10 +252,10 @@ def test_invalid_id_422(ctx):
     assert ctx["client"].get(BASE_URL + "/not-a-uuid", headers=ctx["headers"]["ao"]).status_code == 422
 
 
-def test_draft_cannot_be_confirmed_by_rf008(ctx):
+def test_draft_cannot_be_confirmed_without_review(ctx):
     order = create(ctx).json()
     r = ctx["client"].post(BASE_URL + "/" + order["id"] + "/confirm", headers=ctx["headers"]["ao"])
-    assert r.status_code == 404
+    assert r.status_code == 422  # RF-010 requiere version de revision
     assert ctx["client"].get(BASE_URL + "/" + order["id"], headers=ctx["headers"]["ao"]).json()["status"] == "draft"
 
 
@@ -289,10 +289,13 @@ def test_order_values_are_plain_text_not_auto_transcribed(ctx):
 
 def test_cannot_edit_non_draft_even_if_owner(ctx):
     order = create(ctx).json()
-    with ctx["factory"]() as db:
-        item = db.get(Order, UUID(order["id"]))
-        item.status = "confirmed"  # Estado que RF-011 podra producir en el futuro.
-        db.commit()
+    url = BASE_URL + "/" + order["id"]
+    reviewed = ctx["client"].put(url + "/review", headers=ctx["headers"]["ao"],
+                json={"quantity":"40", "due_date":"2026-12-01", "expected_revision":0})
+    assert reviewed.status_code == 200
+    confirmed = ctx["client"].post(url + "/confirm", headers=ctx["headers"]["ao"],
+                json={"expected_revision": reviewed.json()["review_revision"]})
+    assert confirmed.status_code == 200
     r = ctx["client"].patch(BASE_URL + "/" + order["id"],
                             headers=ctx["headers"]["ao"], json={"raw_text":"No permitido"})
     assert r.status_code == 409

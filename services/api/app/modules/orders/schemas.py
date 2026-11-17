@@ -1,5 +1,6 @@
 """RF-008: captura estricta de texto libre y lectura de metadatos inmutables."""
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
@@ -50,3 +51,7 @@ class OrderRead(BaseModel):
     source: Literal["manual", "audio"]
     created_at: datetime
     updated_at: datetime
+    reviewed_quantity: Decimal | None
+    reviewed_due_date: date | None
+    confirmed_at: datetime | None
+    review_revision: int
