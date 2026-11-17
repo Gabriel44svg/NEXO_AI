@@ -7,6 +7,7 @@ from sqlalchemy import create_engine, pool
 from app.core.config import get_database_url
 from app.db.base import Base
 from app.modules.organizations import model  # noqa: F401 registra tabla
+from app.modules.auth import model as auth_model  # noqa: F401 registra tablas RF-002
 
 config = context.config
 target_metadata = Base.metadata
