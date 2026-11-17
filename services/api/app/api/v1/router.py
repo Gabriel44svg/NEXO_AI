@@ -1,9 +1,8 @@
-
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import health
+from app.modules.organizations.router import router as organizations_router
 
 api_router = APIRouter()
-
-# Registro de los endpoints de la API v1
 api_router.include_router(health.router)
+api_router.include_router(organizations_router)
