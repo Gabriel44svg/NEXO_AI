@@ -15,6 +15,7 @@ from app.db.base import Base
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
+        UniqueConstraint("id", "organization_id", name="uq_orders_id_org"),
         ForeignKeyConstraint(
             ["created_by_user_id", "organization_id"],
             ["users.id", "users.organization_id"],
@@ -28,7 +29,7 @@ class Order(Base):
         CheckConstraint("review_revision >= 0", name="ck_orders_review_revision_nonnegative"),
         CheckConstraint("reviewed_quantity IS NULL OR reviewed_quantity > 0", name="ck_orders_review_quantity_positive"),
         CheckConstraint("suggested_quantity IS NULL OR suggested_quantity > 0", name="ck_orders_suggested_quantity_positive"),
-        CheckConstraint("status <> 'confirmed' OR (reviewed_quantity IS NOT NULL AND reviewed_due_date IS NOT NULL AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL)", name="ck_orders_confirmed_has_review"),
+        CheckConstraint("status NOT IN ('confirmed', 'in_progress', 'completed') OR (reviewed_quantity IS NOT NULL AND reviewed_due_date IS NOT NULL AND reviewed_at IS NOT NULL AND reviewed_by_user_id IS NOT NULL AND confirmed_at IS NOT NULL AND confirmed_by_user_id IS NOT NULL)", name="ck_orders_confirmed_has_review"),
         ForeignKeyConstraint(["reviewed_by_user_id", "organization_id"],
             ["users.id", "users.organization_id"], name="fk_orders_reviewer_tenant"),
         ForeignKeyConstraint(["confirmed_by_user_id", "organization_id"],

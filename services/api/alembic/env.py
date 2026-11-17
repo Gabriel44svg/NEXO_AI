@@ -14,6 +14,8 @@ from app.modules.capacity import model as capacity_model  # noqa: F401 registra 
 from app.modules.voice_notes import model as voice_note_model  # noqa: F401 registra RF-009
 from app.modules.orders import model as orders_model  # noqa: F401 registra RF-008
 
+from app.modules.order_status import model as order_status_model  # noqa: F401 registra RF-011
+
 config = context.config
 target_metadata = Base.metadata
 

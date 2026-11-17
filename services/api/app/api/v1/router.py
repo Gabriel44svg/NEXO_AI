@@ -29,3 +29,6 @@ from app.modules.review.router import router as review_router
 api_router.include_router(voice_notes_router)
 
 api_router.include_router(review_router)
+
+from app.modules.order_status.router import router as order_status_router
+api_router.include_router(order_status_router)

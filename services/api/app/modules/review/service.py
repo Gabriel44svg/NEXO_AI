@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.modules.auth.security import utc_now
 from app.modules.orders.model import Order
 from app.modules.orders.service import get_order
+from app.modules.order_status.service import write_status_event
 from app.modules.review.schemas import ReviewRead, ReviewSave
 from app.modules.tenancy.scope import TenantScope
 
@@ -23,9 +24,9 @@ def _can_edit(order: Order, scope: TenantScope, role: str) -> None:
         raise HTTPException(status_code=403, detail="Solo puedes revisar tus propias solicitudes")
 
 
-def _draft(order: Order) -> None:
-    if order.status != "draft":
-        raise HTTPException(status_code=409, detail="La solicitud ya no es un borrador")
+def _reviewable(order: Order) -> None:
+    if order.status not in {"draft", "pending"}:
+        raise HTTPException(status_code=409, detail="El pedido ya no admite revision")
 
 
 def review_view(order: Order) -> ReviewRead:
@@ -42,7 +43,7 @@ def review_view(order: Order) -> ReviewRead:
         confirmed_at=order.confirmed_at,
         confirmed_by_user_id=order.confirmed_by_user_id,
         review_revision=order.review_revision,
-        requires_manual_review=(order.status == "draft"),
+        requires_manual_review=(order.status in {"draft", "pending"}),
     )
 
 
@@ -54,7 +55,7 @@ def save_review(db: Session, scope: TenantScope, order_id: UUID,
                 payload: ReviewSave, *, role: str) -> ReviewRead:
     order = get_order(db, scope, order_id, lock=True)
     _can_edit(order, scope, role)
-    _draft(order)
+    _reviewable(order)
     if order.review_revision != payload.expected_revision:
         raise HTTPException(status_code=409, detail="La revision cambio. Vuelve a abrir el formulario")
     order.reviewed_quantity = payload.quantity
@@ -71,16 +72,19 @@ def confirm_review(db: Session, scope: TenantScope, order_id: UUID, *,
                    expected_revision: int, role: str) -> ReviewRead:
     order = get_order(db, scope, order_id, lock=True)
     _can_edit(order, scope, role)
-    _draft(order)
+    _reviewable(order)
     if order.review_revision != expected_revision:
         raise HTTPException(status_code=409, detail="La revision cambio. Vuelve a abrir el formulario")
     if (order.reviewed_quantity is None or order.reviewed_due_date is None or
             order.reviewed_by_user_id is None or order.reviewed_at is None):
         raise HTTPException(status_code=409, detail="Debes guardar los datos revisados antes de confirmar")
     # La confirmacion toma SOLO los valores corregidos, no la propuesta IA.
+    previous_status = order.status
     order.status = "confirmed"
     order.confirmed_by_user_id = scope.actor_id
     order.confirmed_at = utc_now()
+    write_status_event(db, scope, order, previous=previous_status, new="confirmed",
+                       note="Confirmacion humana RF-010")
     db.commit()
     db.refresh(order)
     return review_view(order)
@@ -98,7 +102,7 @@ def stage_suggested_extraction(db: Session, scope: TenantScope, order_id: UUID, 
     if due_date is not None and not isinstance(due_date, date):
         raise ValueError("Fecha sugerida invalida")
     order = get_order(db, scope, order_id, lock=True)
-    _draft(order)
+    _reviewable(order)
     order.suggested_quantity = quantity
     order.suggested_due_date = due_date
     order.reviewed_quantity = None

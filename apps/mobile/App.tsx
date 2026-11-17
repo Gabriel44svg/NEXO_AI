@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, SafeAreaView,
+  ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import {
@@ -12,6 +12,18 @@ import { fetch as expoFetch } from 'expo/fetch';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
 const ENDPOINT = '/voice-notes';
+
+type OrderStatus = 'draft' | 'pending' | 'confirmed' | 'in_progress' | 'completed' | 'cancelled';
+type StatusRead = { order_id: string; status: OrderStatus; allowed_next: OrderStatus[]; review_revision: number };
+type StatusEvent = {
+  id: string; order_id: string; from_status: OrderStatus; to_status: OrderStatus;
+  changed_at: string; changed_by_user_id: string; note: string | null;
+};
+type StatusChangeResult = { order: StatusRead; event: StatusEvent };
+const STATE_LABELS: Record<OrderStatus, string> = {
+  draft: 'Borrador', pending: 'Pendiente', confirmed: 'Confirmado',
+  in_progress: 'En proceso', completed: 'Completado', cancelled: 'Cancelado',
+};
 
 type LoginResponse = { access_token: string; token_type: string; expires_in: number };
 type VoiceNote = { id: string; byte_size: number; duration_ms: number | null; created_at: string };
@@ -97,6 +109,8 @@ export default function App() {
   const [activeReview, setActiveReview] = useState<OrderReview | null>(null);
   const [reviewQty, setReviewQty] = useState('');
   const [reviewDueDate, setReviewDueDate] = useState('');
+  const [orderStatus, setOrderStatus] = useState<StatusRead | null>(null);
+  const [statusHistory, setStatusHistory] = useState<StatusEvent[]>([]);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -135,6 +149,7 @@ export default function App() {
     } catch { /* El token se descarta aunque el servidor no este disponible. */ }
     setToken(null); setRecordingUri(null); setSavedNotes([]);
     setDraftOrders([]); setActiveReview(null); setReviewQty(''); setReviewDueDate('');
+    setOrderStatus(null); setStatusHistory([]);
     player.pause(); setMessage('Sesion cerrada.'); setBusy(false);
   }
 
@@ -219,7 +234,7 @@ export default function App() {
         body: JSON.stringify({ raw_text: draftText.trim() }),
       });
       setDraftText('');
-      setTab('review'); setDraftOrders([]); setActiveReview(null);
+      setTab('review'); setDraftOrders([]); setActiveReview(null); setOrderStatus(null); setStatusHistory([]);
       setMessage(`Borrador ${result.id.slice(0, 8)} guardado. Abre «Cargar solicitudes» para revisar y confirmar.`);
     } catch (error) { errorMessage(error); }
     finally { setBusy(false); }
@@ -255,13 +270,17 @@ export default function App() {
     if (!token || busy) return;
     setBusy(true); setMessage('Cargando formulario...');
     try {
-      const review = await apiRequest<OrderReview>(`/orders/${orderId}/review`, {
-        method: 'GET', headers: auth,
-      });
+      const [review, current, history] = await Promise.all([
+        apiRequest<OrderReview>(`/orders/${orderId}/review`, { method: 'GET', headers: auth }),
+        apiRequest<StatusRead>(`/orders/${orderId}/status`, { method: 'GET', headers: auth }),
+        apiRequest<StatusEvent[]>(`/orders/${orderId}/history?limit=20`, { method: 'GET', headers: auth }),
+      ]);
+      setOrderStatus(current);
+      setStatusHistory(history);
       setActiveReview(review);
       setReviewQty(review.reviewed_quantity ?? review.suggested_quantity ?? '');
       setReviewDueDate(review.reviewed_due_date ?? review.suggested_due_date ?? '');
-      setMessage(review.status === 'draft'
+      setMessage(['draft', 'pending'].includes(review.status)
         ? 'Corrige cantidad y fecha, guarda la revisión y después confirma.'
         : `Pedido ${review.status}: los valores confirmados son de solo lectura.`);
     } catch (error) { errorMessage(error); }
@@ -269,7 +288,7 @@ export default function App() {
   }
 
   async function saveReviewedOrder() {
-    if (!activeReview || !token || busy || activeReview.status !== 'draft') return;
+    if (!activeReview || !token || busy || !['draft', 'pending'].includes(activeReview.status)) return;
     // Validacion de UX; la API valida nuevamente con Decimal y Date.
     const quantity = reviewQty.trim();
     const due = reviewDueDate.trim();
@@ -297,7 +316,7 @@ export default function App() {
     && reviewDueDate.trim() === activeReview.reviewed_due_date;
 
   async function confirmReviewedOrder() {
-    if (!token || !activeReview || !reviewIsSaved || busy || activeReview.status !== 'draft') return;
+    if (!token || !activeReview || !reviewIsSaved || busy || !['draft', 'pending'].includes(activeReview.status)) return;
     setBusy(true); setMessage('Confirmando el pedido...');
     try {
       const updated = await apiRequest<OrderReview>(`/orders/${activeReview.id}/confirm`, {
@@ -305,11 +324,48 @@ export default function App() {
         body: JSON.stringify({ expected_revision: activeReview.review_revision }),
       });
       setActiveReview(updated);
+      const [current, history] = await Promise.all([
+        apiRequest<StatusRead>(`/orders/${updated.id}/status`, { method: 'GET', headers: auth }),
+        apiRequest<StatusEvent[]>(`/orders/${updated.id}/history?limit=20`, { method: 'GET', headers: auth }),
+      ]);
+      setOrderStatus(current); setStatusHistory(history);
       setDraftOrders(prev => prev.map(order => order.id === updated.id
         ? { ...order, status: updated.status, review_revision: updated.review_revision } : order));
       setMessage(`Pedido ${updated.id.slice(0, 8)} CONFIRMADO con ${updated.reviewed_quantity} unidades para el ${updated.reviewed_due_date}.`);
     } catch (error) { errorMessage(error); }
     finally { setBusy(false); }
+  }
+
+  async function changeOrderStatus(toStatus: OrderStatus) {
+    if (!token || !activeReview || !orderStatus || busy) return;
+    const orderId = activeReview.id;
+    setBusy(true); setMessage(`Cambiando a ${STATE_LABELS[toStatus]}...`);
+    try {
+      const result = await apiRequest<StatusChangeResult>(`/orders/${orderId}/status`, {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ expected_status: orderStatus.status, to_status: toStatus }),
+      });
+      setOrderStatus(result.order);
+      setStatusHistory(prev => [result.event, ...prev].slice(0, 20));
+      setActiveReview(prev => prev && prev.id === orderId ? { ...prev, status: result.order.status } : prev);
+      setDraftOrders(prev => prev.map(order => order.id === orderId
+        ? { ...order, status: result.order.status } : order));
+      setMessage(`Pedido ${orderId.slice(0, 8)} ahora esta ${STATE_LABELS[toStatus]}.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  function requestStatusChange(toStatus: OrderStatus) {
+    if (toStatus === 'cancelled' || toStatus === 'completed') {
+      Alert.alert('Confirmar cambio de estado',
+        `¿Marcar el pedido como ${STATE_LABELS[toStatus]}? Esta accion no se puede revertir.`,
+        [
+          { text: 'Volver', style: 'cancel' },
+          { text: 'Confirmar', style: 'destructive', onPress: () => { void changeOrderStatus(toStatus); } },
+        ]);
+      return;
+    }
+    void changeOrderStatus(toStatus);
   }
 
   return (
@@ -318,7 +374,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Captura, revision y confirmacion · RF-010</Text>
+          <Text style={styles.caption}>Captura, revision y estados · RF-011</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -407,20 +463,50 @@ export default function App() {
                       <TextInput style={styles.input} accessibilityLabel="Cantidad corregida"
                         placeholder="Ej. 40" placeholderTextColor="#94A3B8" keyboardType="decimal-pad"
                         value={reviewQty} onChangeText={setReviewQty}
-                        editable={activeReview.status === 'draft' && !busy} />
+                        editable={['draft', 'pending'].includes(activeReview.status) && !busy} />
                       <Text style={styles.help}>Fecha corregida (AAAA-MM-DD):</Text>
                       <TextInput style={styles.input} accessibilityLabel="Fecha de entrega corregida"
                         placeholder="2026-12-19" placeholderTextColor="#94A3B8" autoCapitalize="none"
                         value={reviewDueDate} onChangeText={setReviewDueDate}
-                        editable={activeReview.status === 'draft' && !busy} />
-                      {activeReview.status === 'draft' ? (
+                        editable={['draft', 'pending'].includes(activeReview.status) && !busy} />
+                      {['draft', 'pending'].includes(activeReview.status) ? (
                         <>
                           <ActionButton label="Guardar revisión" onPress={saveReviewedOrder} disabled={busy} secondary />
                           <Text style={styles.help}>La confirmación solo usa los valores guardados, nunca la propuesta sin revisar.</Text>
                           <ActionButton label="Confirmar pedido" onPress={confirmReviewedOrder}
                             disabled={busy || !reviewIsSaved} />
                         </>
-                      ) : <Text style={styles.notice}>Pedido confirmado; no admite nuevas ediciones en RF-010.</Text>}
+                      ) : <Text style={styles.notice}>Pedido en etapa operativa o cerrado; no admite ediciones.</Text>}
+                    </View>
+                  )}
+                  {!!activeReview && !!orderStatus && (
+                    <View style={styles.reviewPanel}>
+                      <Text style={styles.subtitle}>Estado e historial</Text>
+                      <Text style={styles.rawText}>Estado actual: {STATE_LABELS[orderStatus.status]}</Text>
+                      <Text style={styles.help}>Las acciones disponibles respetan las transiciones permitidas.</Text>
+                      {orderStatus.allowed_next.map(next => (
+                        <ActionButton key={next} label={`Marcar como ${STATE_LABELS[next]}`}
+                          onPress={() => requestStatusChange(next)} disabled={busy} secondary />
+                      ))}
+                      {orderStatus.status === 'pending' && (
+                        <Text style={styles.help}>Puedes guardar la revisión y confirmar desde el formulario de arriba.</Text>
+                      )}
+                      {orderStatus.allowed_next.length === 0 && (
+                        <Text style={styles.notice}>Estado final: no admite otras transiciones.</Text>
+                      )}
+                      <Text style={styles.subtitle}>Movimientos registrados</Text>
+                      {statusHistory.length === 0 && (
+                        <Text style={styles.help}>Todavía no existen transiciones registradas.</Text>
+                      )}
+                      {statusHistory.map(event => (
+                        <View key={event.id} style={styles.historyRow}>
+                          <Text style={styles.saved}>
+                            {STATE_LABELS[event.from_status]} → {STATE_LABELS[event.to_status]}
+                          </Text>
+                          <Text style={styles.help}>{new Date(event.changed_at).toLocaleString()}</Text>
+                          <Text style={styles.saved}>Usuario: {event.changed_by_user_id.slice(0, 8)}</Text>
+                        </View>
+                      ))}
                     </View>
                   )}
                 </View>
@@ -461,6 +547,7 @@ const styles = StyleSheet.create({
   buttonText: { color: '#06212C', fontWeight: '800', fontSize: 15 },
   buttonTextSecondary: { color: '#D8F8F0' },
   orderRow: { padding: 12, borderRadius: 10, backgroundColor: '#142D40', gap: 4 },
+  historyRow: { paddingVertical: 7, borderTopWidth: 1, borderTopColor: '#35506D', gap: 3 },
   reviewPanel: { marginTop: 12, padding: 12, borderWidth: 1, borderRadius: 12, borderColor: '#35506D', gap: 9 },
   rawText: { color: '#EDF6FF', fontSize: 15, paddingVertical: 7 },
   link: { color: '#5EEAD4', fontWeight: '700', fontSize: 13 },
