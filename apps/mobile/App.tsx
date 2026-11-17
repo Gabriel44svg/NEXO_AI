@@ -7,7 +7,8 @@ import {
   AudioModule, RecordingPresets, setAudioModeAsync,
   useAudioPlayer, useAudioRecorder, useAudioRecorderState,
 } from 'expo-audio';
-import { File } from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import { fetch as expoFetch } from 'expo/fetch';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
@@ -41,6 +42,11 @@ type QuoteResult = {
   direct_cost: string; estimated_gross_margin: string; items: QuoteLineResult[];
 };
 
+type QuoteDocumentResult = {
+  id: string; quote_id: string; order_id: string; quote_version: number;
+  folio: string; valid_until: string; generated_at: string;
+  sha256: string; size_bytes: number; download_path: string;
+};
 type LoginResponse = { access_token: string; token_type: string; expires_in: number };
 type VoiceNote = { id: string; byte_size: number; duration_ms: number | null; created_at: string };
 type DraftOrder = { id: string; status: string; raw_text: string; review_revision: number };
@@ -155,6 +161,12 @@ export default function App() {
   const [quoteTaxConfig, setQuoteTaxConfig] = useState<QuoteTaxConfig | null>(null);
   const [quotePreview, setQuotePreview] = useState<QuoteResult | null>(null);
   const [quoteHistory, setQuoteHistory] = useState<QuoteResult[]>([]);
+  const [quoteDocuments, setQuoteDocuments] = useState<Record<string, QuoteDocumentResult>>({});
+  const [quoteValidUntil, setQuoteValidUntil] = useState(() => {
+    const date = new Date(); date.setDate(date.getDate() + 14);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  });
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -194,7 +206,7 @@ export default function App() {
     setToken(null); setRecordingUri(null); setSavedNotes([]);
     setDraftOrders([]); setActiveReview(null); setReviewQty(''); setReviewDueDate('');
     setOrderStatus(null); setStatusHistory([]); setSearchPage(null);
-    setQuoteOrders([]); setQuoteHistory([]); setQuotePreview(null); setQuoteOrderId('');
+    setQuoteOrders([]); setQuoteHistory([]); setQuoteDocuments({}); setQuotePreview(null); setQuoteOrderId('');
     player.pause(); setMessage('Sesion cerrada.'); setBusy(false);
   }
 
@@ -466,13 +478,24 @@ export default function App() {
 
   async function selectQuoteOrder(id: string) {
     if (!token || busy) return;
-    setQuoteOrderId(id); setQuotePreview(null);
+    setQuoteOrderId(id); setQuotePreview(null); setQuoteDocuments({});
     setBusy(true); setMessage('Consultando versiones...');
     try {
       const versions = await apiRequest<QuoteResult[]>(`/quotes?order_id=${encodeURIComponent(id)}`, {
         method: 'GET', headers: auth,
       });
-      setQuoteHistory(versions); setMessage(`Pedido ${id.slice(0, 8)} seleccionado.`);
+      setQuoteHistory(versions);
+      // Solo consultar metadatos; nunca descargar PDF sin accion explicita del usuario.
+      const available = await Promise.all(versions.filter(x => x.status === 'approved').map(async x => {
+        try {
+          const document = await apiRequest<QuoteDocumentResult>(`/quotes/${x.id}/document`, {
+            method: 'GET', headers: auth,
+          });
+          return [x.id, document] as const;
+        } catch { return null; } // 404 si aun no se ha emitido.
+      }));
+      setQuoteDocuments(Object.fromEntries(available.filter((x): x is readonly [string, QuoteDocumentResult] => x !== null)));
+      setMessage(`Pedido ${id.slice(0, 8)} seleccionado.`);
     } catch (error) { errorMessage(error); }
     finally { setBusy(false); }
   }
@@ -562,11 +585,63 @@ export default function App() {
           });
           setQuoteHistory(prev => prev.map(x => x.id === id ? updated : x));
           setQuotePreview(updated);
-          setMessage(`Cotización versión ${updated.version} aprobada. PDF disponible en RF-014.`);
+          setMessage(`Cotización versión ${updated.version} aprobada. Ya puedes emitir su PDF.`);
         } catch (error) { errorMessage(error); }
         finally { setBusy(false); }
       })(); } },
     ]);
+  }
+
+  async function generateQuotePdf(quoteId: string) {
+    if (!token || busy) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(quoteValidUntil)) {
+      setMessage('Escribe la vigencia en formato AAAA-MM-DD.'); return;
+    }
+    setBusy(true); setMessage('Emitiendo PDF de cotización...');
+    try {
+      const document = await apiRequest<QuoteDocumentResult>(`/quotes/${quoteId}/document`, {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valid_until: quoteValidUntil }),
+      });
+      setQuoteDocuments(prev => ({ ...prev, [quoteId]: document }));
+      setMessage(`PDF emitido con folio ${document.folio}; vigencia ${document.valid_until}.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function shareQuotePdf(quoteId: string) {
+    const doc = quoteDocuments[quoteId];
+    if (!token || !doc || busy) return;
+    setBusy(true); setMessage('Descargando PDF con autorización...');
+    try {
+      const response = await expoFetch(`${API_URL}/quotes/${quoteId}/pdf`, {
+        method: 'GET', headers: auth,
+      });
+      if (!response.ok) {
+        let detail = `HTTP ${response.status}`;
+        try { detail = JSON.stringify((await response.json()).detail ?? detail); } catch { /* respuesta inesperada */ }
+        throw new Error(`Error ${response.status}: ${detail}`);
+      }
+      if (!(response.headers.get('content-type') ?? '').includes('application/pdf')) {
+        throw new Error('El servidor no devolvió un documento PDF válido.');
+      }
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.length < 100 || String.fromCharCode(...bytes.slice(0, 5)) !== '%PDF-') {
+        throw new Error('El archivo PDF está vacío o no es válido.');
+      }
+      const file = new File(Paths.cache, `${doc.folio}.pdf`);
+      await file.write(bytes);
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/pdf', UTI: 'com.adobe.pdf',
+          dialogTitle: `Cotización ${doc.folio}`,
+        });
+      } else {
+        await file.preview({ title: `Cotización ${doc.folio}` });
+      }
+      setMessage(`PDF ${doc.folio} listo para guardar o compartir.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
   }
 
   return (
@@ -575,7 +650,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Captura, pedidos y cotizaciones · RF-013</Text>
+          <Text style={styles.caption}>Captura, cotizaciones y PDF · RF-014</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -801,11 +876,28 @@ export default function App() {
                   )}
                   <ActionButton label="Guardar nueva versión de cotización" onPress={() => { void calculateQuote(true); }}
                     disabled={busy || !quoteOrderId || !quoteProductId || !quoteTaxConfig?.configured} />
-                  <Text style={styles.subtitle}>3. Historial y aprobación</Text>
+                  <Text style={styles.subtitle}>3. Historial, aprobación y PDF</Text>
+                  <Text style={styles.help}>Vigencia del PDF (AAAA-MM-DD):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Vigencia de cotización PDF"
+                    placeholder="AAAA-MM-DD" placeholderTextColor="#94A3B8"
+                    value={quoteValidUntil} onChangeText={setQuoteValidUntil}
+                    autoCapitalize="none" />
+                  <Text style={styles.help}>Al emitir un PDF, su folio y vigencia se conservan. No puede editarse ni regenerarse con otra fecha.</Text>
                   {quoteHistory.map(quote => (
                     <View key={quote.id} style={styles.orderRow}>
                       <Text style={styles.saved}>v{quote.version} · {quote.status} · Total ${quote.total}</Text>
                       <Text style={styles.help}>{quote.items.map(x => `${x.product_name} × ${x.quantity}`).join(', ')}</Text>
+                      {quote.status === 'approved' && (quoteDocuments[quote.id] ? (
+                        <>
+                          <Text style={styles.help}>Folio: {quoteDocuments[quote.id].folio}</Text>
+                          <Text style={styles.help}>Válida hasta: {quoteDocuments[quote.id].valid_until}</Text>
+                          <ActionButton label="Descargar / compartir PDF" disabled={busy} secondary
+                            onPress={() => { void shareQuotePdf(quote.id); }} />
+                        </>
+                      ) : (
+                        <ActionButton label="Emitir PDF de cotización" disabled={busy}
+                          onPress={() => { void generateQuotePdf(quote.id); }} />
+                      ))}
                       {quote.status === 'draft' && quote.version === (quoteHistory[0]?.version ?? 0) && (
                         <ActionButton label="Aprobar versión (propietario)" secondary
                           onPress={() => { void approveQuote(quote.id); }} disabled={busy} />

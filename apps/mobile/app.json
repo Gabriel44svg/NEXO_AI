@@ -25,7 +25,8 @@
           "microphonePermission": "NEXO AI necesita usar el microfono para registrar notas de voz."
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-sharing"
     ]
   }
 }
