@@ -35,6 +35,7 @@ class Order(Base):
         ForeignKeyConstraint(["confirmed_by_user_id", "organization_id"],
             ["users.id", "users.organization_id"], name="fk_orders_confirmer_tenant"),
         Index("ix_orders_org_created", "organization_id", "created_at"),
+        Index("ix_orders_org_status_created_id", "organization_id", "status", "created_at", "id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)

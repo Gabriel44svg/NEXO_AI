@@ -23,6 +23,8 @@ api_router.include_router(materials_router)
 api_router.include_router(recipe_router)
 api_router.include_router(capacity_router)
 
+from app.modules.order_search.router import router as order_search_router
+api_router.include_router(order_search_router)  # RF-012: ruta estatica antes de /{order_id}
 api_router.include_router(orders_router)
 from app.modules.voice_notes.router import router as voice_notes_router
 from app.modules.review.router import router as review_router

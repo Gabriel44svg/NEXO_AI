@@ -28,6 +28,13 @@ const STATE_LABELS: Record<OrderStatus, string> = {
 type LoginResponse = { access_token: string; token_type: string; expires_in: number };
 type VoiceNote = { id: string; byte_size: number; duration_ms: number | null; created_at: string };
 type DraftOrder = { id: string; status: string; raw_text: string; review_revision: number };
+type SearchOrder = DraftOrder & {
+  created_at: string; created_by_user_id: string; source: string;
+};
+type SearchPage = {
+  items: SearchOrder[]; total: number; limit: number; offset: number;
+  has_more: boolean; next_offset: number | null;
+};
 type OrderReview = {
   id: string; organization_id: string; status: string; raw_text: string;
   suggested_quantity: string | null; suggested_due_date: string | null;
@@ -97,7 +104,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -111,6 +118,12 @@ export default function App() {
   const [reviewDueDate, setReviewDueDate] = useState('');
   const [orderStatus, setOrderStatus] = useState<StatusRead | null>(null);
   const [statusHistory, setStatusHistory] = useState<StatusEvent[]>([]);
+  const [filterText, setFilterText] = useState('');
+  const [filterStatus, setFilterStatus] = useState<OrderStatus | ''>('');
+  const [filterFrom, setFilterFrom] = useState('');
+  const [filterTo, setFilterTo] = useState('');
+  const [filterMine, setFilterMine] = useState(false);
+  const [searchPage, setSearchPage] = useState<SearchPage | null>(null);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -149,7 +162,7 @@ export default function App() {
     } catch { /* El token se descarta aunque el servidor no este disponible. */ }
     setToken(null); setRecordingUri(null); setSavedNotes([]);
     setDraftOrders([]); setActiveReview(null); setReviewQty(''); setReviewDueDate('');
-    setOrderStatus(null); setStatusHistory([]);
+    setOrderStatus(null); setStatusHistory([]); setSearchPage(null);
     player.pause(); setMessage('Sesion cerrada.'); setBusy(false);
   }
 
@@ -266,6 +279,38 @@ export default function App() {
     finally { setBusy(false); }
   }
 
+  async function searchOrders(offset = 0) {
+    if (!token || busy) return;
+    const from = filterFrom.trim(); const to = filterTo.trim();
+    if ((from && !/^\d{4}-\d{2}-\d{2}$/.test(from)) ||
+        (to && !/^\d{4}-\d{2}-\d{2}$/.test(to))) {
+      setMessage('Usa fechas AAAA-MM-DD en los filtros.'); return;
+    }
+    if (from && to && from > to) {
+      setMessage('Fecha desde no puede ser posterior a fecha hasta.'); return;
+    }
+    const params = new URLSearchParams({ limit: '10', offset: String(offset) });
+    if (filterStatus) params.set('status', filterStatus);
+    if (filterText.trim()) params.set('q', filterText.trim());
+    if (from) params.set('date_from', from);
+    if (to) params.set('date_to', to);
+    if (filterMine) params.set('only_mine', 'true');
+    setBusy(true); setMessage('Buscando pedidos de la organizacion...');
+    try {
+      const page = await apiRequest<SearchPage>(`/orders/search?${params.toString()}`, {
+        method: 'GET', headers: auth,
+      });
+      setSearchPage(page);
+      setMessage(`${page.total} pedidos coinciden. Mostrando ${page.items.length} resultados.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  function clearSearch() {
+    setFilterText(''); setFilterStatus(''); setFilterFrom(''); setFilterTo('');
+    setFilterMine(false); setSearchPage(null); setMessage('Filtros limpiados.');
+  }
+
   async function openReview(orderId: string) {
     if (!token || busy) return;
     setBusy(true); setMessage('Cargando formulario...');
@@ -374,7 +419,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Captura, revision y estados · RF-011</Text>
+          <Text style={styles.caption}>Captura, estados y busqueda · RF-012</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -402,6 +447,9 @@ export default function App() {
                 </Pressable>
                 <Pressable onPress={() => setTab('review')} style={[styles.tab, tab === 'review' && styles.tabActive]}>
                   <Text style={styles.tabText}>Revisar</Text>
+                </Pressable>
+                <Pressable onPress={() => setTab('search')} style={[styles.tab, tab === 'search' && styles.tabActive]}>
+                  <Text style={styles.tabText}>Buscar</Text>
                 </Pressable>
               </View>
               {tab === 'voice' ? (
@@ -436,7 +484,7 @@ export default function App() {
                     value={draftText} onChangeText={setDraftText} />
                   <ActionButton label="Guardar borrador de texto" onPress={saveText} disabled={busy || !draftText.trim()} />
                 </View>
-              ) : (
+              ) : tab === 'review' ? (
                 <View style={styles.section}>
                   <Text style={styles.help}>Los audios aun no se transcriben automaticamente. Revisa borradores creados desde texto.</Text>
                   <ActionButton label="Cargar mis solicitudes" onPress={refreshOrders} disabled={busy} secondary />
@@ -510,6 +558,67 @@ export default function App() {
                     </View>
                   )}
                 </View>
+              ) : (
+                <View style={styles.section}>
+                  <Text style={styles.subtitle}>Buscar pedidos</Text>
+                  <Text style={styles.help}>Filtra pedidos de tu empresa por estado, fecha de creación y texto.</Text>
+                  <TextInput style={styles.input} value={filterText} onChangeText={setFilterText}
+                    placeholder="Buscar en las solicitudes" placeholderTextColor="#94A3B8"
+                    accessibilityLabel="Buscar texto" autoCorrect={false} />
+                  <Text style={styles.help}>Estado del pedido</Text>
+                  <View style={styles.filterWrap}>
+                    {(['', 'draft', 'pending', 'confirmed', 'in_progress', 'completed', 'cancelled'] as const).map(value => (
+                      <Pressable key={value || 'all'} accessibilityRole="button"
+                        accessibilityLabel={`Filtrar ${value ? STATE_LABELS[value] : 'Todos'}`}
+                        onPress={() => { setFilterStatus(value); setSearchPage(null); }}
+                        style={[styles.filterChip, filterStatus === value && styles.filterChipActive]}>
+                        <Text style={styles.filterChipText}>{value ? STATE_LABELS[value] : 'Todos'}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <Text style={styles.help}>Fecha desde (AAAA-MM-DD)</Text>
+                  <TextInput style={styles.input} value={filterFrom} onChangeText={setFilterFrom}
+                    accessibilityLabel="Fecha desde" placeholder="2026-11-01"
+                    placeholderTextColor="#94A3B8" autoCapitalize="none" />
+                  <Text style={styles.help}>Fecha hasta (AAAA-MM-DD)</Text>
+                  <TextInput style={styles.input} value={filterTo} onChangeText={setFilterTo}
+                    accessibilityLabel="Fecha hasta" placeholder="2026-11-30"
+                    placeholderTextColor="#94A3B8" autoCapitalize="none" />
+                  <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: filterMine }}
+                    onPress={() => { setFilterMine(!filterMine); setSearchPage(null); }}>
+                    <Text style={styles.link}>{filterMine ? '☑' : '☐'} Solo mis pedidos</Text>
+                  </Pressable>
+                  <ActionButton label="Aplicar filtros" onPress={() => { void searchOrders(0); }} disabled={busy} />
+                  <ActionButton label="Limpiar filtros" onPress={clearSearch} disabled={busy} secondary />
+                  {!!searchPage && (
+                    <>
+                      <Text style={styles.help}>
+                        {searchPage.total} resultados · Página {Math.floor(searchPage.offset / searchPage.limit) + 1}
+                      </Text>
+                      {searchPage.items.length === 0 && <Text style={styles.notice}>Sin pedidos coincidentes.</Text>}
+                      {searchPage.items.map(order => (
+                        <Pressable key={order.id} accessibilityRole="button"
+                          onPress={() => { setTab('review'); void openReview(order.id); }}
+                          disabled={busy} style={styles.orderRow}>
+                          <Text style={styles.saved}>{order.id.slice(0, 8)} · {STATE_LABELS[order.status as OrderStatus]}</Text>
+                          <Text style={styles.help} numberOfLines={3}>{order.raw_text}</Text>
+                          <Text style={styles.saved}>Creado: {new Date(order.created_at).toLocaleString()}</Text>
+                          <Text style={styles.link}>Abrir revisión e historial</Text>
+                        </Pressable>
+                      ))}
+                      <View style={styles.pagination}>
+                        <View style={styles.pageButton}>
+                          <ActionButton label="Anterior" secondary disabled={busy || searchPage.offset === 0}
+                            onPress={() => { void searchOrders(Math.max(0, searchPage.offset - searchPage.limit)); }} />
+                        </View>
+                        <View style={styles.pageButton}>
+                          <ActionButton label="Siguiente" secondary disabled={busy || !searchPage.has_more}
+                            onPress={() => { if (searchPage.next_offset !== null) void searchOrders(searchPage.next_offset); }} />
+                        </View>
+                      </View>
+                    </>
+                  )}
+                </View>
               )}
               <ActionButton label="Consultar mis audios" onPress={refreshNotes} disabled={busy || recorderState.isRecording} secondary />
               {savedNotes.slice(0, 10).map((note) => (
@@ -551,10 +660,16 @@ const styles = StyleSheet.create({
   reviewPanel: { marginTop: 12, padding: 12, borderWidth: 1, borderRadius: 12, borderColor: '#35506D', gap: 9 },
   rawText: { color: '#EDF6FF', fontSize: 15, paddingVertical: 7 },
   link: { color: '#5EEAD4', fontWeight: '700', fontSize: 13 },
-  tabs: { flexDirection: 'row', gap: 8 },
+  tabs: { flexDirection: 'row', gap: 6 },
+  filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
+  filterChip: { backgroundColor: '#1A2C43', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
+  filterChipActive: { backgroundColor: '#236C6B' },
+  filterChipText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
+  pagination: { flexDirection: 'row', gap: 12 },
+  pageButton: { flex: 1 },
   tab: { flex: 1, backgroundColor: '#1A2C43', alignItems: 'center', padding: 10, borderRadius: 9 },
   tabActive: { backgroundColor: '#236C6B' },
-  tabText: { color: '#FFFFFF', fontWeight: '600' },
+  tabText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
   section: { gap: 9 },
   help: { color: '#C4D4E4', fontSize: 13 },
   notice: { color: '#FFD8A8', fontSize: 14 },
