@@ -4,6 +4,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -32,8 +33,20 @@ def get_auth_context(
         session_id = UUID(claims["jti"])
     except (TypeError, ValueError, KeyError) as exc:
         raise HTTPException(status_code=401, detail="Token invalido") from exc
-    user = db.get(User, user_id)
-    session = db.get(AuthSession, session_id)
+    # RF-004: filter BEFORE reading the identity and session.  The signed org
+    # claim must match the persisted user's organization, not a request header.
+    user = db.scalar(
+        select(User).where(
+            User.id == user_id,
+            User.organization_id == organization_id,
+        )
+    )
+    session = db.scalar(
+        select(AuthSession).where(
+            AuthSession.id == session_id,
+            AuthSession.user_id == user_id,
+        )
+    )
     if (
         user is None or not user.is_active or user.organization_id != organization_id
         or session is None or session.user_id != user_id
