@@ -15,6 +15,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         UniqueConstraint("organization_id", "email", name="uq_users_org_email"),
+        UniqueConstraint("id", "organization_id", name="uq_users_id_org"),
         CheckConstraint("role IN ('owner', 'operator')", name="ck_users_role"),
         CheckConstraint("failed_login_attempts >= 0", name="ck_users_failed_attempts"),
     )

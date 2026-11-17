@@ -11,6 +11,7 @@ from app.modules.auth import model as auth_model  # noqa: F401 registra tablas R
 from app.modules.products import model as product_model  # noqa: F401 registra tabla RF-005
 from app.modules.materials import model as materials_model  # noqa: F401 registra RF-006
 from app.modules.capacity import model as capacity_model  # noqa: F401 registra RF-007
+from app.modules.orders import model as orders_model  # noqa: F401 registra RF-008
 
 config = context.config
 target_metadata = Base.metadata

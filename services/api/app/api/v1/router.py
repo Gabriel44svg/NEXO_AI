@@ -8,6 +8,7 @@ from app.modules.tenancy.router import router as tenancy_router
 from app.modules.products.router import router as products_router
 from app.modules.materials.router import materials_router, recipe_router
 from app.modules.capacity.router import router as capacity_router
+from app.modules.orders.router import router as orders_router
 
 api_router = APIRouter()
 api_router.include_router(health.router)
@@ -21,3 +22,5 @@ api_router.include_router(products_router)
 api_router.include_router(materials_router)
 api_router.include_router(recipe_router)
 api_router.include_router(capacity_router)
+
+api_router.include_router(orders_router)
