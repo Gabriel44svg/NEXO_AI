@@ -16,6 +16,7 @@ class Product(Base):
     __tablename__ = "products"
     __table_args__ = (
         UniqueConstraint("organization_id", "sku", name="uq_products_org_sku"),
+        UniqueConstraint("id", "organization_id", name="uq_products_id_org"),
         CheckConstraint("length(trim(sku)) > 0", name="ck_products_sku_not_empty"),
         CheckConstraint("length(trim(name)) > 0", name="ck_products_name_not_empty"),
         CheckConstraint("length(trim(unit)) > 0", name="ck_products_unit_not_empty"),

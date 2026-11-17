@@ -9,6 +9,7 @@ from app.db.base import Base
 from app.modules.organizations import model  # noqa: F401 registra tabla
 from app.modules.auth import model as auth_model  # noqa: F401 registra tablas RF-002
 from app.modules.products import model as product_model  # noqa: F401 registra tabla RF-005
+from app.modules.materials import model as materials_model  # noqa: F401 registra RF-006
 
 config = context.config
 target_metadata = Base.metadata
