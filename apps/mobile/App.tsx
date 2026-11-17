@@ -25,6 +25,22 @@ const STATE_LABELS: Record<OrderStatus, string> = {
   in_progress: 'En proceso', completed: 'Completado', cancelled: 'Cancelado',
 };
 
+type CatalogProduct = {
+  id: string; sku: string; name: string; unit: string; price_mxn: string;
+  cost_mxn: string; is_active: boolean;
+};
+type QuoteTaxConfig = { configured: boolean; tax_percent: string | null };
+type QuoteLineResult = {
+  product_id: string; product_name: string; product_sku: string;
+  quantity: string; unit_price: string; line_subtotal: string;
+};
+type QuoteResult = {
+  id: string; order_id: string; version: number; status: 'draft' | 'approved';
+  subtotal: string; discount_percent: string; discount_amount: string;
+  tax_percent: string; tax_amount: string; taxable_base: string; total: string;
+  direct_cost: string; estimated_gross_margin: string; items: QuoteLineResult[];
+};
+
 type LoginResponse = { access_token: string; token_type: string; expires_in: number };
 type VoiceNote = { id: string; byte_size: number; duration_ms: number | null; created_at: string };
 type DraftOrder = { id: string; status: string; raw_text: string; review_revision: number };
@@ -104,7 +120,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -124,6 +140,21 @@ export default function App() {
   const [filterTo, setFilterTo] = useState('');
   const [filterMine, setFilterMine] = useState(false);
   const [searchPage, setSearchPage] = useState<SearchPage | null>(null);
+
+  const [quoteOrders, setQuoteOrders] = useState<SearchOrder[]>([]);
+  const [quoteOrderId, setQuoteOrderId] = useState('');
+  const [catalogProducts, setCatalogProducts] = useState<CatalogProduct[]>([]);
+  const [quoteProductId, setQuoteProductId] = useState('');
+  const [quoteQuantity, setQuoteQuantity] = useState('1.000');
+  const [quoteDiscount, setQuoteDiscount] = useState('0.00');
+  const [quoteTaxInput, setQuoteTaxInput] = useState('16.00');
+  const [newProductSku, setNewProductSku] = useState('DEMO-001');
+  const [newProductName, setNewProductName] = useState('Producto de demostracion');
+  const [newProductPrice, setNewProductPrice] = useState('25.50');
+  const [newProductCost, setNewProductCost] = useState('9.25');
+  const [quoteTaxConfig, setQuoteTaxConfig] = useState<QuoteTaxConfig | null>(null);
+  const [quotePreview, setQuotePreview] = useState<QuoteResult | null>(null);
+  const [quoteHistory, setQuoteHistory] = useState<QuoteResult[]>([]);
 
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder);
@@ -163,6 +194,7 @@ export default function App() {
     setToken(null); setRecordingUri(null); setSavedNotes([]);
     setDraftOrders([]); setActiveReview(null); setReviewQty(''); setReviewDueDate('');
     setOrderStatus(null); setStatusHistory([]); setSearchPage(null);
+    setQuoteOrders([]); setQuoteHistory([]); setQuotePreview(null); setQuoteOrderId('');
     player.pause(); setMessage('Sesion cerrada.'); setBusy(false);
   }
 
@@ -413,13 +445,137 @@ export default function App() {
     void changeOrderStatus(toStatus);
   }
 
+  async function loadQuoteWorkspace() {
+    if (!token || busy) return;
+    setBusy(true); setMessage('Cargando catálogo y pedidos...');
+    try {
+      const [orders, products, tax] = await Promise.all([
+        apiRequest<SearchPage>('/orders/search?limit=20', { method: 'GET', headers: auth }),
+        apiRequest<CatalogProduct[]>('/products/quotable?limit=100', { method: 'GET', headers: auth }),
+        apiRequest<QuoteTaxConfig>('/quotes/tax-config', { method: 'GET', headers: auth }),
+      ]);
+      setQuoteOrders(orders.items.filter(order => !['completed', 'cancelled'].includes(order.status)));
+      setCatalogProducts(products);
+      setQuoteTaxConfig(tax);
+      if (tax.tax_percent !== null) setQuoteTaxInput(String(tax.tax_percent));
+      if (products.length && !products.some(prod => prod.id === quoteProductId)) setQuoteProductId(products[0].id);
+      setMessage(tax.configured ? 'Catálogo y pedidos listos.' : 'Configura explícitamente el impuesto antes de cotizar.');
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function selectQuoteOrder(id: string) {
+    if (!token || busy) return;
+    setQuoteOrderId(id); setQuotePreview(null);
+    setBusy(true); setMessage('Consultando versiones...');
+    try {
+      const versions = await apiRequest<QuoteResult[]>(`/quotes?order_id=${encodeURIComponent(id)}`, {
+        method: 'GET', headers: auth,
+      });
+      setQuoteHistory(versions); setMessage(`Pedido ${id.slice(0, 8)} seleccionado.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function createCatalogProduct() {
+    if (!token || busy) return;
+    if (!newProductSku.trim() || !newProductName.trim()
+        || !/^\d{1,10}(?:\.\d{1,2})?$/.test(newProductPrice.trim())
+        || !/^\d{1,10}(?:\.\d{1,2})?$/.test(newProductCost.trim())) {
+      setMessage('Introduce SKU, nombre, precio y costo válidos (dos decimales).'); return;
+    }
+    setBusy(true); setMessage('Registrando producto aprobado...');
+    try {
+      const p = await apiRequest<CatalogProduct>('/products', {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sku: newProductSku.trim(), name: newProductName.trim(),
+          unit: 'pieza', price_mxn: newProductPrice.trim(), cost_mxn: newProductCost.trim(),
+          base_production_minutes: '4.00' }),
+      });
+      setCatalogProducts(prev => [...prev, p]); setQuoteProductId(p.id);
+      setMessage(`Producto ${p.sku} guardado con precio de catálogo. Puedes cotizarlo.`);
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function configureQuoteTax() {
+    if (!token || busy) return;
+    if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(quoteTaxInput.trim()) || Number(quoteTaxInput) > 100) {
+      setMessage('Impuesto inválido: escribe un porcentaje entre 0 y 100 con hasta 2 decimales.'); return;
+    }
+    setBusy(true); setMessage('Configurando impuesto...');
+    try {
+      const result = await apiRequest<QuoteTaxConfig>('/quotes/tax-config', {
+        method: 'PUT', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tax_percent: quoteTaxInput.trim() }),
+      });
+      setQuoteTaxConfig(result); setMessage('Impuesto configurado por el propietario.');
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  function quotePayload() {
+    if (!quoteOrderId || !quoteProductId) throw new Error('Selecciona un pedido y un producto.');
+    if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(quoteQuantity.trim()) || Number(quoteQuantity) <= 0) {
+      throw new Error('Cantidad inválida: valor mayor a cero y máximo 3 decimales.');
+    }
+    if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(quoteDiscount.trim()) || Number(quoteDiscount) > 100) {
+      throw new Error('Descuento inválido: valor entre 0 y 100 con máximo 2 decimales.');
+    }
+    return {
+      order_id: quoteOrderId, discount_percent: quoteDiscount.trim(),
+      items: [{ product_id: quoteProductId, quantity: quoteQuantity.trim() }],
+    };
+  }
+
+  async function calculateQuote(persist: boolean) {
+    if (!token || busy) return;
+    setBusy(true); setMessage(persist ? 'Guardando nueva versión...' : 'Calculando cotización...');
+    try {
+      const body = quotePayload();
+      const result = await apiRequest<QuoteResult>(persist ? '/quotes' : '/quotes/preview', {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      setQuotePreview(result);
+      if (persist) {
+        const versions = await apiRequest<QuoteResult[]>(`/quotes?order_id=${encodeURIComponent(quoteOrderId)}`, {
+          method: 'GET', headers: auth,
+        });
+        setQuoteHistory(versions);
+      }
+      setMessage(persist ? `Cotización versión ${result.version} guardada como borrador.`
+        : 'Vista previa calculada sin guardar ni modificar pedidos.');
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function approveQuote(id: string) {
+    if (!token || busy) return;
+    Alert.alert('Aprobar cotización', '¿Aprobar la versión más reciente? Solo el propietario puede hacerlo.', [
+      { text: 'Volver', style: 'cancel' },
+      { text: 'Aprobar', onPress: () => { void (async () => {
+        setBusy(true); setMessage('Aprobando cotización...');
+        try {
+          const updated = await apiRequest<QuoteResult>(`/quotes/${id}/approve`, {
+            method: 'POST', headers: auth,
+          });
+          setQuoteHistory(prev => prev.map(x => x.id === id ? updated : x));
+          setQuotePreview(updated);
+          setMessage(`Cotización versión ${updated.version} aprobada. PDF disponible en RF-014.`);
+        } catch (error) { errorMessage(error); }
+        finally { setBusy(false); }
+      })(); } },
+    ]);
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Captura, estados y busqueda · RF-012</Text>
+          <Text style={styles.caption}>Captura, pedidos y cotizaciones · RF-013</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -440,16 +596,19 @@ export default function App() {
               <Text style={styles.subtitle}>Nueva solicitud</Text>
               <View style={styles.tabs}>
                 <Pressable onPress={() => setTab('voice')} style={[styles.tab, tab === 'voice' && styles.tabActive]}>
-                  <Text style={styles.tabText}>Nota de voz</Text>
+                  <Text style={styles.tabText}>Voz</Text>
                 </Pressable>
                 <Pressable onPress={() => setTab('text')} style={[styles.tab, tab === 'text' && styles.tabActive]}>
-                  <Text style={styles.tabText}>Texto manual</Text>
+                  <Text style={styles.tabText}>Texto</Text>
                 </Pressable>
                 <Pressable onPress={() => setTab('review')} style={[styles.tab, tab === 'review' && styles.tabActive]}>
                   <Text style={styles.tabText}>Revisar</Text>
                 </Pressable>
                 <Pressable onPress={() => setTab('search')} style={[styles.tab, tab === 'search' && styles.tabActive]}>
                   <Text style={styles.tabText}>Buscar</Text>
+                </Pressable>
+                <Pressable onPress={() => setTab('quote')} style={[styles.tab, tab === 'quote' && styles.tabActive]}>
+                  <Text style={styles.tabText}>Cotizar</Text>
                 </Pressable>
               </View>
               {tab === 'voice' ? (
@@ -527,6 +686,11 @@ export default function App() {
                       ) : <Text style={styles.notice}>Pedido en etapa operativa o cerrado; no admite ediciones.</Text>}
                     </View>
                   )}
+                  {!!activeReview && !['completed', 'cancelled'].includes(activeReview.status) && (
+                    <ActionButton label="Cotizar este pedido" secondary disabled={busy}
+                      onPress={() => { setQuoteOrderId(activeReview.id); setTab('quote');
+                        void selectQuoteOrder(activeReview.id); }} />
+                  )}
                   {!!activeReview && !!orderStatus && (
                     <View style={styles.reviewPanel}>
                       <Text style={styles.subtitle}>Estado e historial</Text>
@@ -557,6 +721,98 @@ export default function App() {
                       ))}
                     </View>
                   )}
+                </View>
+              ) : tab === 'quote' ? (
+                <View style={styles.section}>
+                  <Text style={styles.subtitle}>Costeo y cotización · RF-013</Text>
+                  <Text style={styles.help}>Se usan precios aprobados en el catálogo. El cálculo no confirma pedidos ni consume inventario.</Text>
+                  <ActionButton label="Cargar productos, pedidos e impuestos" onPress={loadQuoteWorkspace}
+                    disabled={busy} secondary />
+                  <Text style={styles.help}>Impuesto configurado: {quoteTaxConfig?.configured
+                    ? `${quoteTaxConfig.tax_percent}%` : 'No configurado'}</Text>
+                  <Text style={styles.help}>Solo el propietario puede configurar la tasa; 0% también requiere configuración explícita.</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Impuesto porcentual"
+                    placeholder="Ej. 16.00" placeholderTextColor="#94A3B8" keyboardType="decimal-pad"
+                    value={quoteTaxInput} onChangeText={setQuoteTaxInput} />
+                  <ActionButton label="Guardar impuesto (propietario)" onPress={configureQuoteTax}
+                    disabled={busy} secondary />
+                  <Text style={styles.subtitle}>1. Seleccionar pedido</Text>
+                  {quoteOrders.length === 0 && (
+                    <Text style={styles.notice}>Pulsa cargar para consultar los pedidos de tu empresa.</Text>
+                  )}
+                  {quoteOrders.map(order => (
+                    <Pressable key={order.id} accessibilityRole="button" disabled={busy}
+                      onPress={() => { void selectQuoteOrder(order.id); }}
+                      style={[styles.orderRow, quoteOrderId === order.id && styles.tabActive]}>
+                      <Text style={styles.saved}>{order.id.slice(0, 8)} · {STATE_LABELS[order.status as OrderStatus]}</Text>
+                      <Text style={styles.help} numberOfLines={2}>{order.raw_text}</Text>
+                      <Text style={styles.link}>{quoteOrderId === order.id ? 'Pedido seleccionado' : 'Seleccionar pedido'}</Text>
+                    </Pressable>
+                  ))}
+                  <Text style={styles.subtitle}>2. Producto y cantidad</Text>
+                  <Text style={styles.help}>Si todavía no tienes productos, el propietario puede crear uno de prueba aquí. No se crea automáticamente.</Text>
+                  <TextInput style={styles.input} accessibilityLabel="SKU del producto"
+                    placeholder="SKU, ej. DEMO-001" placeholderTextColor="#94A3B8"
+                    value={newProductSku} onChangeText={setNewProductSku} autoCapitalize="characters" />
+                  <TextInput style={styles.input} accessibilityLabel="Nombre del producto"
+                    placeholder="Nombre del producto" placeholderTextColor="#94A3B8"
+                    value={newProductName} onChangeText={setNewProductName} />
+                  <TextInput style={styles.input} accessibilityLabel="Precio aprobado MXN"
+                    placeholder="Precio de venta, ej. 25.50" placeholderTextColor="#94A3B8"
+                    keyboardType="decimal-pad" value={newProductPrice} onChangeText={setNewProductPrice} />
+                  <TextInput style={styles.input} accessibilityLabel="Costo directo MXN"
+                    placeholder="Costo directo, ej. 9.25" placeholderTextColor="#94A3B8"
+                    keyboardType="decimal-pad" value={newProductCost} onChangeText={setNewProductCost} />
+                  <ActionButton label="Crear producto (propietario)" onPress={createCatalogProduct}
+                    disabled={busy} secondary />
+                  {catalogProducts.length === 0 && (
+                    <Text style={styles.notice}>No hay productos activos. El propietario debe crear uno desde /docs → POST /api/v1/products.</Text>
+                  )}
+                  {catalogProducts.map(prod => (
+                    <Pressable key={prod.id} accessibilityRole="button" disabled={busy}
+                      onPress={() => { setQuoteProductId(prod.id); setQuotePreview(null); }}
+                      style={[styles.orderRow, quoteProductId === prod.id && styles.tabActive]}>
+                      <Text style={styles.saved}>{prod.sku} · {prod.name}</Text>
+                      <Text style={styles.help}>Precio aprobado: ${prod.price_mxn} MXN / {prod.unit}</Text>
+                      <Text style={styles.link}>{quoteProductId === prod.id ? 'Seleccionado' : 'Seleccionar'}</Text>
+                    </Pressable>
+                  ))}
+                  <Text style={styles.help}>Cantidad (hasta tres decimales):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Cantidad de cotización"
+                    value={quoteQuantity} onChangeText={setQuoteQuantity} keyboardType="decimal-pad"
+                    placeholder="1.000" placeholderTextColor="#94A3B8" />
+                  <Text style={styles.help}>Descuento autorizado (%):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Descuento porcentual"
+                    value={quoteDiscount} onChangeText={setQuoteDiscount} keyboardType="decimal-pad"
+                    placeholder="0.00" placeholderTextColor="#94A3B8" />
+                  <ActionButton label="Calcular vista previa" onPress={() => { void calculateQuote(false); }}
+                    disabled={busy || !quoteOrderId || !quoteProductId || !quoteTaxConfig?.configured} secondary />
+                  {!!quotePreview && (
+                    <View style={styles.reviewPanel}>
+                      <Text style={styles.subtitle}>Resultado · MXN</Text>
+                      <Text style={styles.saved}>Subtotal: ${quotePreview.subtotal}</Text>
+                      <Text style={styles.saved}>Descuento ({quotePreview.discount_percent}%): -${quotePreview.discount_amount}</Text>
+                      <Text style={styles.saved}>Base gravable: ${quotePreview.taxable_base}</Text>
+                      <Text style={styles.saved}>Impuesto ({quotePreview.tax_percent}%): ${quotePreview.tax_amount}</Text>
+                      <Text style={styles.rawText}>TOTAL: ${quotePreview.total}</Text>
+                      <Text style={styles.saved}>Costo directo registrado: ${quotePreview.direct_cost}</Text>
+                      <Text style={styles.help}>Margen bruto estimado (no es utilidad neta): ${quotePreview.estimated_gross_margin}</Text>
+                    </View>
+                  )}
+                  <ActionButton label="Guardar nueva versión de cotización" onPress={() => { void calculateQuote(true); }}
+                    disabled={busy || !quoteOrderId || !quoteProductId || !quoteTaxConfig?.configured} />
+                  <Text style={styles.subtitle}>3. Historial y aprobación</Text>
+                  {quoteHistory.map(quote => (
+                    <View key={quote.id} style={styles.orderRow}>
+                      <Text style={styles.saved}>v{quote.version} · {quote.status} · Total ${quote.total}</Text>
+                      <Text style={styles.help}>{quote.items.map(x => `${x.product_name} × ${x.quantity}`).join(', ')}</Text>
+                      {quote.status === 'draft' && quote.version === (quoteHistory[0]?.version ?? 0) && (
+                        <ActionButton label="Aprobar versión (propietario)" secondary
+                          onPress={() => { void approveQuote(quote.id); }} disabled={busy} />
+                      )}
+                    </View>
+                  ))}
+                  <Text style={styles.help}>Los cambios de precio o impuestos generan una versión nueva: nunca sobrescriben la anterior.</Text>
                 </View>
               ) : (
                 <View style={styles.section}>

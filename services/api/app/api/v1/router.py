@@ -34,3 +34,6 @@ api_router.include_router(review_router)
 
 from app.modules.order_status.router import router as order_status_router
 api_router.include_router(order_status_router)
+
+from app.modules.quotes.router import router as quotes_router
+api_router.include_router(quotes_router)
