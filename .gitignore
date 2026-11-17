@@ -69,3 +69,6 @@ Thumbs.db
 .vscode/*
 !.vscode/extensions.json
 !.vscode/settings.json
+
+# Audios privados RF-009
+/services/api/storage/
