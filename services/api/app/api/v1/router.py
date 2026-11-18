@@ -40,3 +40,6 @@ api_router.include_router(quotes_router)
 
 from app.modules.quote_documents.router import router as quote_documents_router
 api_router.include_router(quote_documents_router)
+
+from app.modules.scenarios.router import router as scenarios_router
+api_router.include_router(scenarios_router)

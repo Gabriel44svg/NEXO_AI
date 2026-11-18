@@ -5,13 +5,15 @@ const QUOTE = new RegExp('^quotes/'+UUID+'(?:/document|/pdf)?$', 'i');
 const allowedParams = {
   'orders/search': new Set(['q','status','date_from','date_to','only_mine','limit','offset']),
   'quotes': new Set(['order_id']),
+  'products/quotable': new Set(['limit']),
+  'capacity/resources': new Set(['limit']),
 };
 
 export function allowedApiPath(segments, queryString='') {
   if (!Array.isArray(segments) || segments.length === 0 ||
       !segments.every(s => typeof s==='string' && /^[a-z0-9_-]{1,80}$/i.test(s))) return null;
   const p=segments.join('/');
-  if (!(p==='orders/search'||p==='quotes'||ORD.test(p)||QUOTE.test(p))) return null;
+  if (!(p==='orders/search'||p==='quotes'||p==='products/quotable'||p==='capacity/resources'||ORD.test(p)||QUOTE.test(p))) return null;
   const inbound=new URLSearchParams(queryString);
   const outbound=new URLSearchParams();
   const allowed=allowedParams[p]||new Set();

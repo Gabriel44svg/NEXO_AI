@@ -30,6 +30,16 @@ type CatalogProduct = {
   id: string; sku: string; name: string; unit: string; price_mxn: string;
   cost_mxn: string; is_active: boolean;
 };
+type ScenarioResource = { id: string; name: string; unit: string; daily_capacity: string; is_active: boolean };
+type ScenarioMaterial = {material_id: string; name: string; unit: string; required: string; available: string; shortage: string};
+type ScenarioTotals = {quantity: string; unit_price_mxn: string; unit_cost_mxn: string;
+  revenue_mxn: string; direct_cost_mxn: string; estimated_gross_margin_mxn: string};
+type ScenarioResult = {order_id: string; product_id: string; delivery_date: string;
+  hypothetical: boolean; persisted: boolean; changes_applied: boolean;
+  original: ScenarioTotals | null; original_delivery_date: string | null; simulated: ScenarioTotals;
+  capacity: null | {name: string; unit: string; available_capacity: string; shortage: string; workable_days: number;
+    daily_capacity: string; includes_existing_commitments: boolean};
+  materials: ScenarioMaterial[]; recipe_configured: boolean; inventory_feasible_if_recipe_configured: boolean|null; notes: string[]};
 type QuoteTaxConfig = { configured: boolean; tax_percent: string | null };
 type QuoteLineResult = {
   product_id: string; product_name: string; product_sku: string;
@@ -51,6 +61,7 @@ type LoginResponse = { access_token: string; token_type: string; expires_in: num
 type VoiceNote = { id: string; byte_size: number; duration_ms: number | null; created_at: string };
 type DraftOrder = { id: string; status: string; raw_text: string; review_revision: number };
 type SearchOrder = DraftOrder & {
+  reviewed_quantity?: string|null; reviewed_due_date?: string|null;
   created_at: string; created_by_user_id: string; source: string;
 };
 type SearchPage = {
@@ -126,7 +137,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -146,6 +157,21 @@ export default function App() {
   const [filterTo, setFilterTo] = useState('');
   const [filterMine, setFilterMine] = useState(false);
   const [searchPage, setSearchPage] = useState<SearchPage | null>(null);
+
+  const [simOrders, setSimOrders] = useState<SearchOrder[]>([]);
+  const [simProducts, setSimProducts] = useState<CatalogProduct[]>([]);
+  const [simResources, setSimResources] = useState<ScenarioResource[]>([]);
+  const [simOrderId, setSimOrderId] = useState('');
+  const [simProductId, setSimProductId] = useState('');
+  const [simResourceId, setSimResourceId] = useState('');
+  const [simQty, setSimQty] = useState('3.000');
+  const [simDate, setSimDate] = useState(() => {
+    const d = new Date(); d.setDate(d.getDate() + 14);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  });
+  const [simPrice, setSimPrice] = useState('');
+  const [simDaily, setSimDaily] = useState('');
+  const [simResult, setSimResult] = useState<ScenarioResult|null>(null);
 
   const [quoteOrders, setQuoteOrders] = useState<SearchOrder[]>([]);
   const [quoteOrderId, setQuoteOrderId] = useState('');
@@ -206,6 +232,7 @@ export default function App() {
     setToken(null); setRecordingUri(null); setSavedNotes([]);
     setDraftOrders([]); setActiveReview(null); setReviewQty(''); setReviewDueDate('');
     setOrderStatus(null); setStatusHistory([]); setSearchPage(null);
+    setSimOrders([]); setSimProducts([]); setSimResources([]); setSimResult(null); setSimOrderId('');
     setQuoteOrders([]); setQuoteHistory([]); setQuoteDocuments({}); setQuotePreview(null); setQuoteOrderId('');
     player.pause(); setMessage('Sesion cerrada.'); setBusy(false);
   }
@@ -457,6 +484,54 @@ export default function App() {
     void changeOrderStatus(toStatus);
   }
 
+  async function loadSimWorkspace() {
+    if (!token || busy) return;
+    setBusy(true); setMessage('Cargando escenarios RF-016...');
+    try {
+      const [orders, products, resources] = await Promise.all([
+        apiRequest<SearchPage>('/orders/search?limit=100', { method: 'GET', headers: auth }),
+        apiRequest<CatalogProduct[]>('/products/quotable?limit=100', { method: 'GET', headers: auth }),
+        apiRequest<ScenarioResource[]>('/capacity/resources?limit=100', { method: 'GET', headers: auth }),
+      ]);
+      setSimOrders(orders.items); setSimProducts(products); setSimResources(resources);
+      if (!simOrderId && orders.items.length) setSimOrderId(orders.items[0].id);
+      if (!simProductId && products.length) setSimProductId(products[0].id);
+      setMessage('Escenarios listos. Los valores son hipoteticos y nunca se guardan.');
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
+  async function runSimulation() {
+    if (!token || busy) return;
+    if (!simOrderId || !simProductId) { setMessage('Selecciona un pedido y un producto.'); return; }
+    if (!/^\d{1,9}(?:\.\d{1,3})?$/.test(simQty) || Number(simQty) <= 0 ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(simDate)) {
+      setMessage('Introduce cantidad positiva (3 decimales) y fecha AAAA-MM-DD.'); return;
+    }
+    if (simPrice && (!/^\d{1,10}(?:\.\d{1,2})?$/.test(simPrice))) {
+      setMessage('Precio hipotetico invalido: usa hasta dos decimales.'); return;
+    }
+    if (simDaily && (!simResourceId || !/^\d{1,9}(?:\.\d{1,3})?$/.test(simDaily) || Number(simDaily) <= 0)) {
+      setMessage('Selecciona recurso y capacidad positiva de hasta tres decimales.'); return;
+    }
+    setBusy(true); setMessage('Evaluando sin modificar datos reales...'); setSimResult(null);
+    try {
+      const payload: Record<string, string> = {
+        order_id: simOrderId, product_id: simProductId, quantity: simQty, delivery_date: simDate,
+      };
+      if (simResourceId) payload.resource_id = simResourceId;
+      if (simDaily) payload.resource_daily_capacity = simDaily;
+      if (simPrice) payload.unit_price_mxn = simPrice;
+      const result = await apiRequest<ScenarioResult>('/simulations/evaluate', {
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      setSimResult(result);
+      setMessage('Simulacion calculada sin guardar ni comprometer inventario.');
+    } catch (error) { errorMessage(error); }
+    finally { setBusy(false); }
+  }
+
   async function loadQuoteWorkspace() {
     if (!token || busy) return;
     setBusy(true); setMessage('Cargando catálogo y pedidos...');
@@ -685,6 +760,9 @@ export default function App() {
                 <Pressable onPress={() => setTab('quote')} style={[styles.tab, tab === 'quote' && styles.tabActive]}>
                   <Text style={styles.tabText}>Cotizar</Text>
                 </Pressable>
+                <Pressable onPress={() => setTab('sim')} style={[styles.tab, tab === 'sim' && styles.tabActive]}>
+                  <Text style={styles.tabText}>Simular</Text>
+                </Pressable>
               </View>
               {tab === 'voice' ? (
                 <View style={styles.section}>
@@ -906,6 +984,74 @@ export default function App() {
                   ))}
                   <Text style={styles.help}>Los cambios de precio o impuestos generan una versión nueva: nunca sobrescriben la anterior.</Text>
                 </View>
+              ) : tab === 'sim' ? (
+                <View style={styles.section}>
+                  <Text style={styles.subtitle}>Simular escenarios · RF-016</Text>
+                  <Text style={styles.notice}>SOLO SIMULACION. No altera pedidos, precios, recursos o existencias.</Text>
+                  <ActionButton label="Cargar pedidos, productos y recursos" disabled={busy} secondary
+                    onPress={() => { void loadSimWorkspace(); }} />
+                  <Text style={styles.subtitle}>1. Selecciona pedido</Text>
+                  {simOrders.length === 0 && <Text style={styles.help}>Carga los datos de tu empresa para empezar.</Text>}
+                  {simOrders.map(o => <Pressable key={o.id} accessibilityRole="button" disabled={busy}
+                    style={[styles.orderRow, simOrderId === o.id && styles.tabActive]} onPress={() => {
+                      setSimOrderId(o.id); setSimResult(null);
+                      if (o.reviewed_quantity) setSimQty(o.reviewed_quantity);
+                      if (o.reviewed_due_date) setSimDate(o.reviewed_due_date);
+                    }}>
+                    <Text style={styles.saved}>{o.id.slice(0, 8)} · {STATE_LABELS[o.status as OrderStatus]}</Text>
+                    <Text style={styles.help}>{o.raw_text}</Text>
+                  </Pressable>)}
+                  <Text style={styles.subtitle}>2. Producto</Text>
+                  {simProducts.map(p => <Pressable key={p.id} disabled={busy} accessibilityRole="button"
+                    style={[styles.orderRow, simProductId === p.id && styles.tabActive]} onPress={() => { setSimProductId(p.id); setSimResult(null); }}>
+                    <Text style={styles.saved}>{p.name} · Precio aprobado ${p.price_mxn}</Text>
+                  </Pressable>)}
+                  <Text style={styles.help}>Cantidad hipotetica (mayor a cero):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Cantidad hipotetica" keyboardType="decimal-pad"
+                    value={simQty} onChangeText={x => { setSimQty(x); setSimResult(null); }}/>
+                  <Text style={styles.help}>Fecha hipotetica de entrega (AAAA-MM-DD):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Fecha hipotetica de entrega"
+                    value={simDate} onChangeText={x => { setSimDate(x); setSimResult(null); }}
+                    autoCapitalize="none" />
+                  <Text style={styles.help}>Precio hipotetico unitario MXN (opcional):</Text>
+                  <TextInput style={styles.input} accessibilityLabel="Precio hipotetico"
+                    value={simPrice} placeholder="Sin cambio" placeholderTextColor="#94A3B8"
+                    onChangeText={x => { setSimPrice(x); setSimResult(null); }} keyboardType="decimal-pad" />
+                  <Text style={styles.subtitle}>3. Recurso (opcional)</Text>
+                  <Pressable accessibilityRole="button" onPress={() => { setSimResourceId(''); setSimDaily(''); setSimResult(null); }}
+                    style={[styles.filterChip, !simResourceId && styles.filterChipActive]}>
+                    <Text style={styles.filterChipText}>Sin recurso</Text>
+                  </Pressable>
+                  {simResources.map(r => <Pressable key={r.id} accessibilityRole="button"
+                    onPress={() => { setSimResourceId(r.id); setSimDaily(''); setSimResult(null); }}
+                    style={[styles.orderRow, simResourceId === r.id && styles.tabActive]}>
+                    <Text style={styles.saved}>{r.name} · {r.daily_capacity} {r.unit} por dia</Text>
+                  </Pressable>)}
+                  {!!simResourceId && <>
+                    <Text style={styles.help}>Capacidad hipotetica diaria (opcional):</Text>
+                    <TextInput style={styles.input} keyboardType="decimal-pad"
+                      accessibilityLabel="Capacidad hipotetica" value={simDaily} placeholder="Sin cambio"
+                      placeholderTextColor="#94A3B8" onChangeText={x => { setSimDaily(x); setSimResult(null); }}/>
+                  </>}
+                  <ActionButton label="Evaluar sin guardar (propietario)" disabled={busy || !simOrderId || !simProductId}
+                    onPress={() => { void runSimulation(); }} />
+                  {!!simResult && <View style={styles.reviewPanel}>
+                    <Text style={styles.subtitle}>Comparacion en MXN</Text>
+                    <Text style={styles.saved}>{simResult.original ? `Original · Ingreso: $${simResult.original.revenue_mxn}` : 'Sin cantidad registrada: no hay linea base'}</Text>
+                    <Text style={styles.saved}>Hipotetico · Ingreso: ${simResult.simulated.revenue_mxn}</Text>
+                    <Text style={styles.rawText}>Margen bruto simulado: ${simResult.simulated.estimated_gross_margin_mxn}</Text>
+                    {!!simResult.capacity && <Text style={styles.help}>
+                      Capacidad bruta: {simResult.capacity.available_capacity} {simResult.capacity.unit}.
+                      Faltante: {simResult.capacity.shortage}. No incluye compromisos previos.
+                    </Text>}
+                    {!simResult.capacity && <Text style={styles.notice}>Capacidad no evaluada: no hay recurso.</Text>}
+                    {simResult.materials.map(m => <Text style={styles.help} key={m.material_id}>
+                      {m.name}: requiere {m.required} {m.unit}, disponibles {m.available}, faltan {m.shortage}.
+                    </Text>)}
+                    {!simResult.recipe_configured && <Text style={styles.notice}>Sin receta: inventario no evaluable.</Text>}
+                    <Text style={styles.notice}>No se ha confirmado ni guardado ningun cambio.</Text>
+                  </View>}
+                </View>
               ) : (
                 <View style={styles.section}>
                   <Text style={styles.subtitle}>Buscar pedidos</Text>
@@ -1008,14 +1154,14 @@ const styles = StyleSheet.create({
   reviewPanel: { marginTop: 12, padding: 12, borderWidth: 1, borderRadius: 12, borderColor: '#35506D', gap: 9 },
   rawText: { color: '#EDF6FF', fontSize: 15, paddingVertical: 7 },
   link: { color: '#5EEAD4', fontWeight: '700', fontSize: 13 },
-  tabs: { flexDirection: 'row', gap: 6 },
+  tabs: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   filterWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 7 },
   filterChip: { backgroundColor: '#1A2C43', paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8 },
   filterChipActive: { backgroundColor: '#236C6B' },
   filterChipText: { color: '#FFFFFF', fontSize: 12, fontWeight: '600' },
   pagination: { flexDirection: 'row', gap: 12 },
   pageButton: { flex: 1 },
-  tab: { flex: 1, backgroundColor: '#1A2C43', alignItems: 'center', padding: 10, borderRadius: 9 },
+  tab: { flexGrow: 1, flexBasis: '30%', backgroundColor: '#1A2C43', alignItems: 'center', padding: 10, borderRadius: 9 },
   tabActive: { backgroundColor: '#236C6B' },
   tabText: { color: '#FFFFFF', fontWeight: '600', fontSize: 12 },
   section: { gap: 9 },
