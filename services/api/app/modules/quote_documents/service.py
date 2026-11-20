@@ -15,6 +15,7 @@ from app.modules.quotes.service import get_quote
 from app.modules.quote_documents.model import QuoteDocument
 from app.modules.quote_documents.pdf import render_quote_pdf
 from app.modules.quote_documents.schemas import DocumentRead
+from app.modules.decisions.audit import audit
 from app.modules.tenancy.scope import TenantScope
 
 
@@ -87,6 +88,10 @@ def create_document(db: Session, scope: TenantScope, quote_id: UUID, valid_until
         generated_by_user_id=scope.actor_id,generated_at=issued,
         sha256=sha256(pdf).hexdigest(),size_bytes=len(pdf),pdf_bytes=pdf)
     db.add(obj)
+    db.flush()
+    audit(db, scope, entity_type='quote_document', entity_id=obj.id,
+          action='quote_document.issued',after={'quote_id':str(quote.id),
+          'folio':folio,'sha256':obj.sha256,'valid_until':str(valid_until)})
     try:
         db.commit()
     except IntegrityError as exc:

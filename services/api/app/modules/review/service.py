@@ -15,6 +15,7 @@ from app.modules.auth.security import utc_now
 from app.modules.orders.model import Order
 from app.modules.orders.service import get_order
 from app.modules.order_status.service import write_status_event
+from app.modules.decisions.audit import audit
 from app.modules.review.schemas import ReviewRead, ReviewSave
 from app.modules.tenancy.scope import TenantScope
 
@@ -58,11 +59,17 @@ def save_review(db: Session, scope: TenantScope, order_id: UUID,
     _reviewable(order)
     if order.review_revision != payload.expected_revision:
         raise HTTPException(status_code=409, detail="La revision cambio. Vuelve a abrir el formulario")
+    before={'reviewed_quantity':str(order.reviewed_quantity) if order.reviewed_quantity else None,
+            'reviewed_due_date':str(order.reviewed_due_date) if order.reviewed_due_date else None,
+            'review_revision':order.review_revision}
     order.reviewed_quantity = payload.quantity
     order.reviewed_due_date = payload.due_date
     order.reviewed_by_user_id = scope.actor_id
     order.reviewed_at = utc_now()
     order.review_revision += 1
+    audit(db, scope, entity_type='order', entity_id=order.id, action='order.reviewed',
+          before=before,after={'reviewed_quantity':str(payload.quantity),
+             'reviewed_due_date':str(payload.due_date),'review_revision':order.review_revision})
     db.commit()
     db.refresh(order)
     return review_view(order)
@@ -85,6 +92,9 @@ def confirm_review(db: Session, scope: TenantScope, order_id: UUID, *,
     order.confirmed_at = utc_now()
     write_status_event(db, scope, order, previous=previous_status, new="confirmed",
                        note="Confirmacion humana RF-010")
+    audit(db, scope, entity_type='order', entity_id=order.id, action='order.confirmed',
+          before={'status':previous_status},after={'status':'confirmed',
+               'review_revision':order.review_revision})
     db.commit()
     db.refresh(order)
     return review_view(order)

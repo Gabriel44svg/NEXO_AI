@@ -16,6 +16,7 @@ class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
         UniqueConstraint("id", "organization_id", name="uq_orders_id_org"),
+        UniqueConstraint('organization_id','created_by_user_id','idempotency_key',name='uq_order_org_actor_idempotency'),
         ForeignKeyConstraint(
             ["created_by_user_id", "organization_id"],
             ["users.id", "users.organization_id"],
@@ -44,6 +45,8 @@ class Order(Base):
     )
     created_by_user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
     raw_text: Mapped[str] = mapped_column(String(5000), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'draft'"))
     source: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'manual'"))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

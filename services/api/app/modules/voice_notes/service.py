@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.tenancy.scope import TenantScope
 from app.modules.voice_notes.model import VoiceNote
+from app.modules.decisions.audit import audit
 
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
 CHUNK_SIZE = 64 * 1024
@@ -72,6 +73,9 @@ def save_voice_note(db: Session, scope: TenantScope, uploaded: UploadFile,
             byte_size=total, duration_ms=duration_ms, sha256_hex=digest.hexdigest(),
         )
         db.add(note)
+        audit(db, scope, entity_type='voice_note', entity_id=note.id,
+              action='voice_note.created',after={'sha256':note.sha256_hex,
+               'byte_size':total})
         db.commit()
         db.refresh(note)
         return note

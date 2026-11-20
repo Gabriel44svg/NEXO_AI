@@ -30,6 +30,7 @@ class Quote(Base):
     __tablename__ = "quotes"
     __table_args__ = (
         UniqueConstraint("id", "organization_id", name="uq_quotes_id_org"),
+        UniqueConstraint('organization_id','created_by_user_id','idempotency_key',name='uq_quote_org_actor_idempotency'),
         UniqueConstraint("organization_id", "order_id", "version", name="uq_quotes_org_order_version"),
         ForeignKeyConstraint(["order_id", "organization_id"], ["orders.id", "orders.organization_id"],
                              name="fk_quotes_order_tenant", ondelete="CASCADE"),
@@ -63,6 +64,8 @@ class Quote(Base):
     direct_cost: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False)
     estimated_gross_margin: Mapped[Decimal] = mapped_column(Numeric(16, 2), nullable=False)
     created_by_user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), nullable=False)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    idempotency_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     approved_by_user_id: Mapped[UUID | None] = mapped_column(Uuid(as_uuid=True), nullable=True)
     approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())

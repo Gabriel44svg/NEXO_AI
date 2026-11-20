@@ -1,7 +1,7 @@
 """RF-008: captura manual de solicitudes; sin confirmar ni procesar pedidos."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, Header, Query, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
@@ -16,8 +16,9 @@ router = APIRouter(prefix="/orders", tags=["RF-008 Solicitudes manuales"])
 
 @router.post("", response_model=OrderRead, status_code=status.HTTP_201_CREATED)
 def create(payload: OrderCreate, context: AuthContext = Depends(require_staff),
+           idempotency_key: str | None = Header(default=None, alias='Idempotency-Key'),
            db: Session = Depends(get_db)):
-    return create_order(db, scope_from_context(context), payload)
+    return create_order(db, scope_from_context(context), payload, idempotency_key=idempotency_key)
 
 
 @router.get("", response_model=list[OrderRead])

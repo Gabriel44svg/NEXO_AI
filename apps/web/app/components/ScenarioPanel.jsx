@@ -1,5 +1,6 @@
 'use client';
 import {useEffect,useState} from 'react';
+import DecisionPanel from './DecisionPanel.jsx';
 const money=value=>new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(Number(value||0));
 const future=()=>{const d=new Date();d.setDate(d.getDate()+14);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;};
 async function get(path){const r=await fetch('/api/data/'+path,{cache:'no-store'});const b=await r.json().catch(()=>({detail:'Respuesta inválida'}));if(!r.ok)throw Error(typeof b.detail==='string'?b.detail:'No se pudo consultar el catálogo');return b;}
@@ -60,5 +61,14 @@ export default function ScenarioPanel({order}){
      </div>}
      <p className="tiny">{result.explanation.caveat}</p>
    </div><p className="tiny">Este cálculo es una aproximación. No constituye una cotización aprobada ni una promesa de entrega.</p></div>}
+  {result&&<DecisionPanel order={order} scenario={{
+     order_id:order.id,product_id:form.product_id,
+     ...(form.quantity.trim()?{quantity:form.quantity.trim()}:{}),
+     ...(form.delivery_date.trim()?{delivery_date:form.delivery_date.trim()}:{}),
+     ...(form.start_date.trim()?{start_date:form.start_date.trim()}:{}),
+     ...(form.resource_id.trim()?{resource_id:form.resource_id.trim()}:{}),
+     ...(form.resource_daily_capacity.trim()?{resource_daily_capacity:form.resource_daily_capacity.trim()}:{}),
+     ...(form.unit_price_mxn.trim()?{unit_price_mxn:form.unit_price_mxn.trim()}:{}),
+  }} onApplied={()=>window.location.reload()}/>}
  </section>;
 }

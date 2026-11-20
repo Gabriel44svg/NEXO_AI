@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Pressable, SafeAreaView,
   ScrollView, StyleSheet, Text, TextInput, View,
@@ -47,6 +47,17 @@ type ScenarioResult = {order_id: string; product_id: string; delivery_date: stri
   capacity: null | {name: string; unit: string; available_capacity: string; shortage: string; workable_days: number;
     daily_capacity: string; includes_existing_commitments: boolean};
   materials: ScenarioMaterial[]; recipe_configured: boolean; inventory_feasible_if_recipe_configured: boolean|null; notes: string[]; explanation: ScenarioExplanation};
+type DecisionRecommendation = {
+  id: string; order_id: string; status: 'proposed'|'applied'|'rejected';
+  engine_version: string; expected_review_revision: number;
+  applied_order_status: string|null; created_at: string; created_by_user_id: string;
+  confirmed_by_user_id: string|null; result: ScenarioResult;
+};
+type OperationalSummary = { today: string; open_orders: number; due_soon: number;
+  overdue: number; committed_orders: number; capacity_caveat: string;
+  alerts: {code:string;severity:string;message:string}[];
+};
+type AuditEntry = {id:string;action:string;occurred_at:string;actor_user_id:string};
 type QuoteTaxConfig = { configured: boolean; tax_percent: string | null };
 type QuoteLineResult = {
   product_id: string; product_name: string; product_sku: string;
@@ -149,6 +160,8 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [draftText, setDraftText] = useState('');
+  const orderCreateKeyRef=useRef<string|null>(null);
+  const quoteCreateKeyRef=useRef<string|null>(null);
   const [recordingUri, setRecordingUri] = useState<string | null>(null);
   const [recordingDurationMs, setRecordingDurationMs] = useState(0);
   const [savedNotes, setSavedNotes] = useState<VoiceNote[]>([]);
@@ -179,6 +192,18 @@ export default function App() {
   const [simPrice, setSimPrice] = useState('');
   const [simDaily, setSimDaily] = useState('');
   const [simResult, setSimResult] = useState<ScenarioResult|null>(null);
+  const [decisionRec, setDecisionRec] = useState<DecisionRecommendation|null>(null);
+  const [decisions, setDecisions] = useState<DecisionRecommendation[]>([]);
+  const [opsSummary, setOpsSummary] = useState<OperationalSummary|null>(null);
+  const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([]);
+  const [decisionWord, setDecisionWord] = useState('');
+  const [decisionAck, setDecisionAck] = useState(false);
+  const [decisionReason, setDecisionReason] = useState('');
+  const proposeKeyRef = useRef<string|null>(null);
+  const confirmKeyRef = useRef<string|null>(null);
+  useEffect(() => {
+    setDecisionRec(null); proposeKeyRef.current=null; confirmKeyRef.current=null;
+  },[simOrderId,simProductId,simQty,simDate,simResourceId,simDaily,simPrice]);
 
   const [quoteOrders, setQuoteOrders] = useState<SearchOrder[]>([]);
   const [quoteOrderId, setQuoteOrderId] = useState('');
@@ -187,6 +212,7 @@ export default function App() {
   const [quoteQuantity, setQuoteQuantity] = useState('1.000');
   const [quoteDiscount, setQuoteDiscount] = useState('0.00');
   const [quoteTaxInput, setQuoteTaxInput] = useState('16.00');
+  useEffect(()=>{quoteCreateKeyRef.current=null;},[quoteOrderId,quoteProductId,quoteQuantity,quoteDiscount]);
   const [newProductSku, setNewProductSku] = useState('DEMO-001');
   const [newProductName, setNewProductName] = useState('Producto de demostracion');
   const [newProductPrice, setNewProductPrice] = useState('25.50');
@@ -318,13 +344,14 @@ export default function App() {
       setMessage('Escribe la solicitud antes de guardarla.');
       return;
     }
+    const requestKey=orderCreateKeyRef.current||(orderCreateKeyRef.current=`order-${Date.now()}-${Math.random().toString(36).slice(2,14)}`);
     setBusy(true); setMessage('');
     try {
       const result = await apiRequest<{ id: string; status: string }>('/orders', {
-        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', 'Idempotency-Key':requestKey },
         body: JSON.stringify({ raw_text: draftText.trim() }),
       });
-      setDraftText('');
+      setDraftText('');orderCreateKeyRef.current=null;
       setTab('review'); setDraftOrders([]); setActiveReview(null); setOrderStatus(null); setStatusHistory([]);
       setMessage(`Borrador ${result.id.slice(0, 8)} guardado. Abre «Cargar solicitudes» para revisar y confirmar.`);
     } catch (error) { errorMessage(error); }
@@ -495,12 +522,13 @@ export default function App() {
     if (!token || busy) return;
     setBusy(true); setMessage('Cargando escenarios RF-016...');
     try {
-      const [orders, products, resources] = await Promise.all([
+      const [orders, products, resources, summary] = await Promise.all([
         apiRequest<SearchPage>('/orders/search?limit=100', { method: 'GET', headers: auth }),
         apiRequest<CatalogProduct[]>('/products/quotable?limit=100', { method: 'GET', headers: auth }),
         apiRequest<ScenarioResource[]>('/capacity/resources?limit=100', { method: 'GET', headers: auth }),
+        apiRequest<OperationalSummary>('/operations/summary?days=7', { method: 'GET', headers: auth }),
       ]);
-      setSimOrders(orders.items); setSimProducts(products); setSimResources(resources);
+      setSimOrders(orders.items); setSimProducts(products); setSimResources(resources); setOpsSummary(summary);
       if (!simOrderId && orders.items.length) setSimOrderId(orders.items[0].id);
       if (!simProductId && products.length) setSimProductId(products[0].id);
       setMessage('Escenarios listos. Los valores son hipoteticos y nunca se guardan.');
@@ -537,6 +565,60 @@ export default function App() {
       setMessage('Simulacion calculada sin guardar ni comprometer inventario.');
     } catch (error) { errorMessage(error); }
     finally { setBusy(false); }
+  }
+
+  const decisionKey = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2,14)}`;
+  function scenarioPayload(): Record<string,string> {
+    const input:Record<string,string> = {order_id:simOrderId,product_id:simProductId,
+      quantity:simQty,delivery_date:simDate};
+    if(simResourceId) input.resource_id=simResourceId;
+    if(simDaily) input.resource_daily_capacity=simDaily;
+    if(simPrice) input.unit_price_mxn=simPrice;
+    return input;
+  }
+  async function loadDecisions() {
+    if(!token||!simOrderId)return;
+    try {
+      const [items,events] = await Promise.all([
+        apiRequest<DecisionRecommendation[]>(`/decisions?order_id=${encodeURIComponent(simOrderId)}`,{
+          method:'GET',headers:auth}),
+        apiRequest<{items:AuditEntry[]}>(`/audit/events?entity_id=${encodeURIComponent(simOrderId)}&limit=30`,{
+          method:'GET',headers:auth}),
+      ]);
+      setDecisions(items);setAuditEntries(events.items);
+    }catch(error){errorMessage(error)}
+  }
+  async function proposeDecision() {
+    if(!token||!simResult||busy)return;
+    const requestKey=proposeKeyRef.current||(proposeKeyRef.current=decisionKey('rec'));
+    setBusy(true);setMessage('Guardando propuesta. No modificara el pedido...');
+    try{
+      const proposal=await apiRequest<DecisionRecommendation>('/decisions/recommend',{
+        method:'POST',headers:{...auth,'Content-Type':'application/json','Idempotency-Key':requestKey},
+        body:JSON.stringify({scenario:scenarioPayload()}),
+      });
+      setDecisionRec(proposal);proposeKeyRef.current=null;
+      setDecisionWord('');setDecisionAck(false);
+      setMessage('Propuesta guardada sin aplicar. Falta una confirmacion explicita.');
+    }catch(error){errorMessage(error);setMessage('Si fallo la red, reintenta: se mantiene la misma clave de idempotencia.');}
+    finally{setBusy(false)}
+  }
+  async function confirmDecision() {
+    if(!token||!decisionRec||busy||decisionWord!=='CONFIRMAR'||!decisionAck)return;
+    const requestKey=confirmKeyRef.current||(confirmKeyRef.current=decisionKey('confirm'));
+    setBusy(true);setMessage('Confirmando decision humana...');
+    try{
+      const updated=await apiRequest<DecisionRecommendation>(`/decisions/${decisionRec.id}/confirm`,{
+        method:'POST',headers:{...auth,'Content-Type':'application/json','Idempotency-Key':requestKey},
+        body:JSON.stringify({confirmation:'CONFIRMAR',
+          expected_review_revision:decisionRec.expected_review_revision,
+          acknowledge_estimates:true,exception_reason:decisionReason.trim()||null}),
+      });
+      setDecisionRec(updated);confirmKeyRef.current=null;
+      setMessage('Decision confirmada y registrada. Estado: '+updated.applied_order_status);
+      void loadDecisions();
+    }catch(error){errorMessage(error);setMessage('No se aplico una nueva accion. Si fallo la red, reintenta con la misma clave.');}
+    finally{setBusy(false)}
   }
 
   async function loadQuoteWorkspace() {
@@ -638,12 +720,14 @@ export default function App() {
     setBusy(true); setMessage(persist ? 'Guardando nueva versión...' : 'Calculando cotización...');
     try {
       const body = quotePayload();
+      const createKey=persist?(quoteCreateKeyRef.current||(quoteCreateKeyRef.current=`quote-${Date.now()}-${Math.random().toString(36).slice(2,14)}`)):null;
       const result = await apiRequest<QuoteResult>(persist ? '/quotes' : '/quotes/preview', {
-        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json' },
+        method: 'POST', headers: { ...auth, 'Content-Type': 'application/json', ...(createKey?{'Idempotency-Key':createKey}:{}) },
         body: JSON.stringify(body),
       });
       setQuotePreview(result);
       if (persist) {
+        quoteCreateKeyRef.current=null;
         const versions = await apiRequest<QuoteResult[]>(`/quotes?order_id=${encodeURIComponent(quoteOrderId)}`, {
           method: 'GET', headers: auth,
         });
@@ -800,7 +884,7 @@ export default function App() {
                   <TextInput style={[styles.input, styles.multi]} multiline maxLength={5000}
                     placeholder="Ej. Necesito 30 playeras estampadas para el viernes..."
                     placeholderTextColor="#94A3B8" accessibilityLabel="Texto de solicitud"
-                    value={draftText} onChangeText={setDraftText} />
+                    value={draftText} onChangeText={x=>{setDraftText(x);orderCreateKeyRef.current=null;}} />
                   <ActionButton label="Guardar borrador de texto" onPress={saveText} disabled={busy || !draftText.trim()} />
                 </View>
               ) : tab === 'review' ? (
@@ -997,6 +1081,11 @@ export default function App() {
                   <Text style={styles.notice}>SOLO SIMULACION. No altera pedidos, precios, recursos o existencias.</Text>
                   <ActionButton label="Cargar pedidos, productos y recursos" disabled={busy} secondary
                     onPress={() => { void loadSimWorkspace(); }} />
+                  {!!opsSummary && <View style={styles.orderRow}>
+                    <Text style={styles.subtitle}>Panel operativo · RF-020</Text>
+                    <Text style={styles.saved}>Abiertos: {opsSummary.open_orders} · Proximos: {opsSummary.due_soon} · Vencidos: {opsSummary.overdue}</Text>
+                    {opsSummary.alerts.map(a=><Text key={a.code} style={styles.notice}>{a.message}</Text>)}
+                  </View>}
                   <Text style={styles.subtitle}>1. Selecciona pedido</Text>
                   {simOrders.length === 0 && <Text style={styles.help}>Carga los datos de tu empresa para empezar.</Text>}
                   {simOrders.map(o => <Pressable key={o.id} accessibilityRole="button" disabled={busy}
@@ -1080,6 +1169,37 @@ export default function App() {
                     </View>}
                     <Text style={styles.notice}>{simResult.explanation.caveat}</Text>
                     <Text style={styles.notice}>No se ha confirmado ni guardado ningun cambio.</Text>
+                    <Text style={styles.subtitle}>Decisión explícita · RF-018 / RF-022</Text>
+                    <ActionButton label="Guardar recomendacion sin aplicar" disabled={busy}
+                      onPress={() => { void proposeDecision(); }}/>
+                    {!!decisionRec && <View style={styles.orderRow}>
+                      <Text style={styles.saved}>Recomendacion {decisionRec.id.slice(0,8)} · {decisionRec.status}</Text>
+                      <Text style={styles.help}>Motor: {decisionRec.engine_version} · Revision: {decisionRec.expected_review_revision}</Text>
+                      {decisionRec.status === 'proposed' && <>
+                        <Text style={styles.help}>Para aceptar cantidad y fecha escribe CONFIRMAR:</Text>
+                        <TextInput style={styles.input} accessibilityLabel="Escribir CONFIRMAR"
+                          value={decisionWord} onChangeText={setDecisionWord} autoCapitalize="characters" />
+                        <Text style={styles.help}>Justificacion excepcional si faltan materiales o capacidad (minimo 15 caracteres):</Text>
+                        <TextInput style={styles.input} value={decisionReason} onChangeText={x=>{
+                          setDecisionReason(x);confirmKeyRef.current=null;
+                        }} accessibilityLabel="Justificacion de decision" maxLength={500} multiline />
+                        <Pressable onPress={()=>setDecisionAck(x=>!x)} accessibilityRole="checkbox"
+                          accessibilityState={{checked:decisionAck}}>
+                          <Text style={styles.link}>{decisionAck?'☑':'☐'} Reconozco estimaciones y faltantes; no se aplica precio ni capacidad hipotetica</Text>
+                        </Pressable>
+                        <ActionButton label="CONFIRMAR y aplicar al pedido" disabled={busy||decisionWord!=='CONFIRMAR'||!decisionAck}
+                          onPress={()=>{void confirmDecision();}} />
+                      </>}
+                      {decisionRec.status === 'applied' && <Text style={styles.saved}>Aplicado y auditado: {decisionRec.applied_order_status}</Text>}
+                    </View>}
+                    <ActionButton label="Cargar historial de decisiones y auditoria" secondary disabled={busy}
+                      onPress={()=>{void loadDecisions();}} />
+                    {decisions.map(d=><Text key={d.id} style={styles.help}>
+                      {d.id.slice(0,8)} · {d.status} · {d.engine_version} · {d.result.simulated.quantity} unidades
+                    </Text>)}
+                    {auditEntries.slice(0,10).map(e=><Text key={e.id} style={styles.help}>
+                      Auditoria: {e.action} · {e.actor_user_id.slice(0,8)}
+                    </Text>)}
                   </View>}
                 </View>
               ) : (

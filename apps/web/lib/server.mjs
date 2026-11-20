@@ -17,9 +17,9 @@ export function apiBase() {
 
 export async function sessionToken(){ return (await cookies()).get(COOKIE)?.value||''; }
 
-export async function upstream(path,token,{method='GET',body}={}) {
+export async function upstream(path,token,{method='GET',body,extraHeaders={}}={}) {
   const options={method,cache:'no-store',redirect:'error',
-    headers:{Accept:'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{})},
+    headers:{Accept:'application/json',...(token?{Authorization:'Bearer '+token}:{}),...(body?{'Content-Type':'application/json'}:{}),...extraHeaders},
     ...(body?{body:JSON.stringify(body)}:{})};
   return fetch(apiBase()+'/'+path,options);
 }

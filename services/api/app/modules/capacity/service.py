@@ -7,6 +7,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.modules.decisions.audit import audit
 
 from app.modules.capacity.model import ProductionResource, ResourceBlackout
 from app.modules.capacity.schemas import CapacityEvaluation, ResourceCreate, ResourcePatch
@@ -52,6 +53,9 @@ def create_resource(db: Session, scope: TenantScope, payload: ResourceCreate) ->
     )
     db.add(item)
     try:
+        db.flush()
+        audit(db, scope, entity_type='resource', entity_id=item.id, action='resource.created',
+              after={'name':item.name,'unit':item.unit,'daily_capacity':str(item.daily_capacity)})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -62,11 +66,14 @@ def create_resource(db: Session, scope: TenantScope, payload: ResourceCreate) ->
 
 def update_resource(db: Session, scope: TenantScope, resource_id: UUID, payload: ResourcePatch) -> ProductionResource:
     item = get_resource(db, scope, resource_id, lock=True)
+    before={'daily_capacity':str(item.daily_capacity),'workdays':item.workdays}
     for key, value in payload.model_dump(exclude_unset=True).items():
         if key == "workdays":
             item.workdays_csv = ",".join(map(str, value))
         else:
             setattr(item, key, value)
+    audit(db, scope, entity_type='resource', entity_id=item.id, action='resource.updated',
+          before=before,after={'daily_capacity':str(item.daily_capacity),'workdays':item.workdays})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -79,6 +86,8 @@ def update_resource(db: Session, scope: TenantScope, resource_id: UUID, payload:
 def deactivate_resource(db: Session, scope: TenantScope, resource_id: UUID) -> ProductionResource:
     item = get_resource(db, scope, resource_id, lock=True)
     item.is_active = False
+    audit(db, scope, entity_type='resource', entity_id=item.id, action='resource.deactivated',
+          before={'is_active':True},after={'is_active':False})
     db.commit()
     db.refresh(item)
     return item
@@ -104,6 +113,8 @@ def set_blackout(db: Session, scope: TenantScope, resource_id: UUID, day: date) 
         return existing
     item = ResourceBlackout(resource_id=resource_id, organization_id=scope.organization_id, day=day)
     db.add(item)
+    audit(db, scope, entity_type='resource', entity_id=resource_id, action='resource.blackout_added',
+          after={'day':str(day)})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -122,6 +133,8 @@ def delete_blackout(db: Session, scope: TenantScope, resource_id: UUID, day: dat
     ))
     if item is None:
         raise HTTPException(status_code=404, detail="Dia no disponible no encontrado")
+    audit(db, scope, entity_type='resource', entity_id=resource_id, action='resource.blackout_removed',
+          before={'day':str(day)})
     db.delete(item)
     db.commit()
 

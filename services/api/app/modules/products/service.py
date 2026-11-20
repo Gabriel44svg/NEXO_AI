@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.modules.decisions.audit import audit
 
 from app.modules.products.model import Product
 from app.modules.products.schemas import ProductCreate, ProductPatch
@@ -62,6 +63,9 @@ def create_scoped_product(db: Session, *, scope: TenantScope, payload: ProductCr
     product = Product(organization_id=scope.organization_id, **payload.model_dump())
     db.add(product)
     try:
+        db.flush()
+        audit(db, scope, entity_type='product', entity_id=product.id, action='product.created',
+              after={'sku':product.sku,'name':product.name,'price_mxn':str(product.price_mxn),'cost_mxn':str(product.cost_mxn)})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -74,8 +78,12 @@ def patch_scoped_product(
     db: Session, *, scope: TenantScope, product_id: UUID, changes: ProductPatch,
 ) -> Product:
     product = get_scoped_product(db, scope=scope, product_id=product_id, lock=True)
-    for key, value in changes.model_dump(exclude_unset=True).items():
+    fields=changes.model_dump(exclude_unset=True)
+    before={k:str(getattr(product,k)) for k in fields}
+    for key, value in fields.items():
         setattr(product, key, value)
+    audit(db, scope, entity_type='product', entity_id=product.id, action='product.updated',
+          before=before,after={k:str(getattr(product,k)) for k in fields})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -88,6 +96,8 @@ def patch_scoped_product(
 def deactivate_scoped_product(db: Session, *, scope: TenantScope, product_id: UUID) -> Product:
     product = get_scoped_product(db, scope=scope, product_id=product_id, lock=True)
     product.is_active = False
+    audit(db, scope, entity_type='product', entity_id=product.id, action='product.deactivated',
+          before={'is_active':True},after={'is_active':False})
     db.commit()
     db.refresh(product)
     return product

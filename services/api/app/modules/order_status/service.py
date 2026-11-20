@@ -13,6 +13,7 @@ from app.modules.auth.security import utc_now
 from app.modules.orders.model import Order
 from app.modules.orders.service import get_order
 from app.modules.order_status.model import OrderStatusEvent
+from app.modules.decisions.audit import audit
 from app.modules.order_status.schemas import StatusRead, StatusTransitionRequest, TransitionResult
 from app.modules.tenancy.scope import TenantScope
 
@@ -72,6 +73,9 @@ def transition_order(db: Session, scope: TenantScope, order_id: UUID, *,
     order.status = payload.to_status
     event = write_status_event(db, scope, order, previous=previous,
                                new=payload.to_status, note=payload.note)
+    audit(db, scope, entity_type='order', entity_id=order.id,
+          action='order.status_changed',before={'status':previous},
+          after={'status':payload.to_status,'note':payload.note})
     db.commit()
     db.refresh(order)
     db.refresh(event)

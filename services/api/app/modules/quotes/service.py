@@ -1,5 +1,8 @@
 """RF-013: cotizaciones con precios del catalogo, impuestos explicitos y versiones inmutables."""
 from decimal import Decimal, ROUND_HALF_UP
+from hashlib import sha256
+from app.modules.decisions.audit import canonical
+from app.modules.decisions.keys import check_key
 from uuid import UUID
 
 from fastapi import HTTPException
@@ -12,6 +15,7 @@ from app.modules.orders.model import Order
 from app.modules.organizations.model import Organization
 from app.modules.products.model import Product
 from app.modules.quotes.model import Quote, QuoteLine, QuoteTaxConfig
+from app.modules.decisions.audit import audit
 from app.modules.quotes.schemas import QuoteCreate, QuoteLineRead, QuoteRead, QuoteTaxRead, QuoteTotals
 from app.modules.tenancy.scope import TenantScope
 
@@ -37,6 +41,7 @@ def read_tax_config(db: Session, scope: TenantScope) -> QuoteTaxRead:
 def save_tax_config(db: Session, scope: TenantScope, tax_percent: Decimal) -> QuoteTaxRead:
     # El limite y el rol de propietario son comprobados en la API; nunca hay tasa implicita.
     obj = db.get(QuoteTaxConfig, scope.organization_id)
+    previous_tax=str(obj.tax_percent) if obj is not None else None
     if obj is None:
         obj = QuoteTaxConfig(organization_id=scope.organization_id,
                              tax_percent=tax_percent, updated_by_user_id=scope.actor_id)
@@ -44,6 +49,9 @@ def save_tax_config(db: Session, scope: TenantScope, tax_percent: Decimal) -> Qu
     else:
         obj.tax_percent = tax_percent
         obj.updated_by_user_id = scope.actor_id
+    audit(db, scope, entity_type='organization', entity_id=scope.organization_id,
+          action='organization.tax_configured',
+          before={'tax_percent':previous_tax},after={'tax_percent':str(tax_percent)})
     db.commit()
     return QuoteTaxRead(configured=True, tax_percent=tax_percent)
 
@@ -127,7 +135,19 @@ def _render_quote(db: Session, quote: Quote) -> QuoteRead:
         }) for line in lines])
 
 
-def create_quote(db: Session, scope: TenantScope, payload: QuoteCreate) -> QuoteRead:
+def create_quote(db: Session, scope: TenantScope, payload: QuoteCreate,
+                 idempotency_key: str | None = None) -> QuoteRead:
+    fingerprint=None
+    if idempotency_key is not None:
+        check_key(idempotency_key)
+        db.scalar(select(Organization).where(Organization.id==scope.organization_id).with_for_update())
+        fingerprint=sha256(canonical(payload.model_dump(mode='json')).encode()).hexdigest()
+        prev=db.scalar(select(Quote).where(Quote.organization_id==scope.organization_id,
+            Quote.created_by_user_id==scope.actor_id,Quote.idempotency_key==idempotency_key))
+        if prev is not None:
+            if prev.idempotency_hash != fingerprint:
+                raise HTTPException(409,detail='Idempotency-Key reutilizada con otra cotizacion')
+            return _render_quote(db,prev)
     order = get_scoped_order(db, scope, payload.order_id, lock=True)
     if order.status in {'cancelled', 'completed'}:
         raise HTTPException(status_code=409, detail='Pedido terminado o cancelado')
@@ -136,6 +156,7 @@ def create_quote(db: Session, scope: TenantScope, payload: QuoteCreate) -> Quote
         Quote.organization_id == scope.organization_id, Quote.order_id == order.id)) or 0) + 1
     quote = Quote(organization_id=scope.organization_id, order_id=order.id,
                   version=version, status='draft', created_by_user_id=scope.actor_id,
+                  idempotency_key=idempotency_key,idempotency_hash=fingerprint,
                   discount_percent=calculated.discount_percent, tax_percent=calculated.tax_percent,
                   subtotal=calculated.subtotal, discount_amount=calculated.discount_amount,
                   taxable_base=calculated.taxable_base, tax_amount=calculated.tax_amount,
@@ -146,6 +167,9 @@ def create_quote(db: Session, scope: TenantScope, payload: QuoteCreate) -> Quote
     for line in calculated.items:
         db.add(QuoteLine(quote_id=quote.id, organization_id=scope.organization_id,
                          **line.model_dump()))
+    audit(db, scope, entity_type='quote', entity_id=quote.id, action='quote.created',
+          after={'order_id':str(order.id),'status':'draft','version':version,
+                 'total':str(calculated.total)})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -191,6 +215,9 @@ def approve_quote(db: Session, scope: TenantScope, quote_id: UUID) -> QuoteRead:
     obj.status = 'approved'
     obj.approved_by_user_id = scope.actor_id
     obj.approved_at = utc_now()
+    audit(db, scope, entity_type='quote', entity_id=obj.id, action='quote.approved',
+          before={'status':'draft'}, after={'status':'approved','version':obj.version,
+                                          'total':str(obj.total)})
     db.commit()
     db.refresh(obj)
     return _render_quote(db, obj)

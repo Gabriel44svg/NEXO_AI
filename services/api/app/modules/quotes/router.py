@@ -1,6 +1,6 @@
 """RF-013: cotizaciones y politica de impuesto, siempre bajo JWT y tenant."""
 from uuid import UUID
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Header, status
 from sqlalchemy.orm import Session
 from app.db.session import get_db
 from app.modules.auth.dependencies import AuthContext
@@ -30,8 +30,9 @@ def preview(payload: QuoteCreate, context: AuthContext = Depends(require_staff),
 
 @router.post('', response_model=QuoteRead, status_code=status.HTTP_201_CREATED)
 def create(payload: QuoteCreate, context: AuthContext = Depends(require_staff),
+           idempotency_key: str | None = Header(default=None,alias='Idempotency-Key'),
            db: Session = Depends(get_db)):
-    return create_quote(db, scope_from_context(context), payload)
+    return create_quote(db, scope_from_context(context), payload, idempotency_key=idempotency_key)
 
 @router.get('', response_model=list[QuoteRead])
 def all_for_order(order_id: UUID, context: AuthContext = Depends(require_staff),

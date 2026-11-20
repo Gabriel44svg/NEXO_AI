@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
+from app.modules.decisions.audit import audit
 
 from app.modules.materials.model import Material, ProductMaterial
 from app.modules.materials.schemas import (
@@ -50,6 +51,9 @@ def create_material(db: Session, scope: TenantScope, payload: MaterialCreate) ->
     item = Material(organization_id=scope.organization_id, **payload.model_dump())
     db.add(item)
     try:
+        db.flush()
+        audit(db, scope, entity_type='material', entity_id=item.id, action='material.created',
+              after={'sku':item.sku,'name':item.name})
         db.commit()
     except IntegrityError as exc:
         db.rollback()
@@ -67,8 +71,12 @@ def list_materials(db: Session, scope: TenantScope, *, include_inactive: bool, l
 
 def patch_material(db: Session, scope: TenantScope, material_id: UUID, payload: MaterialPatch) -> Material:
     item = find_material(db, scope, material_id, lock=True)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    fields=payload.model_dump(exclude_unset=True)
+    before={k:str(getattr(item,k)) for k in fields}
+    for key, value in fields.items():
         setattr(item, key, value)
+    audit(db, scope, entity_type='material', entity_id=item.id, action='material.updated',
+          before=before,after={k:str(getattr(item,k)) for k in fields})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -81,7 +89,10 @@ def patch_material(db: Session, scope: TenantScope, material_id: UUID, payload: 
 def set_stock(db: Session, scope: TenantScope, material_id: UUID, quantity: Decimal) -> Material:
     """Ajuste de stock absoluto, no una reserva ni un consumo por pedido."""
     item = find_material(db, scope, material_id, lock=True)
+    previous=item.quantity_available
     item.quantity_available = quantity
+    audit(db, scope, entity_type='material', entity_id=item.id, action='material.stock_set',
+          before={'quantity_available':str(previous)},after={'quantity_available':str(quantity)})
     db.commit()
     db.refresh(item)
     return item
@@ -90,6 +101,8 @@ def set_stock(db: Session, scope: TenantScope, material_id: UUID, quantity: Deci
 def deactivate_material(db: Session, scope: TenantScope, material_id: UUID) -> Material:
     item = find_material(db, scope, material_id, lock=True)
     item.is_active = False
+    audit(db, scope, entity_type='material', entity_id=item.id, action='material.deactivated',
+          before={'is_active':True},after={'is_active':False})
     db.commit()
     db.refresh(item)
     return item
@@ -128,12 +141,16 @@ def upsert_recipe_item(db: Session, scope: TenantScope, product_id: UUID, materi
         ProductMaterial.product_id == product_id,
         ProductMaterial.material_id == material_id,
     ))
+    before_value=str(link.quantity_per_unit) if link is not None else None
     if link is None:
         link = ProductMaterial(organization_id=scope.organization_id, product_id=product_id,
                                material_id=material_id, quantity_per_unit=payload.quantity_per_unit)
         db.add(link)
     else:
         link.quantity_per_unit = payload.quantity_per_unit
+    audit(db, scope, entity_type='product', entity_id=product_id, action='product.recipe_set',
+          before={'material_id':str(material_id),'quantity_per_unit':before_value},
+          after={'material_id':str(material_id),'quantity_per_unit':str(payload.quantity_per_unit)})
     try:
         db.commit()
     except IntegrityError as exc:
@@ -153,6 +170,8 @@ def delete_recipe_item(db: Session, scope: TenantScope, product_id: UUID, materi
     ))
     if link is None:
         raise _not_found()
+    audit(db, scope, entity_type='product', entity_id=product_id, action='product.recipe_removed',
+          before={'material_id':str(material_id),'quantity_per_unit':str(link.quantity_per_unit)})
     db.delete(link)
     db.commit()
 

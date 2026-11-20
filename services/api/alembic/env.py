@@ -19,6 +19,8 @@ from app.modules.order_status import model as order_status_model  # noqa: F401 r
 from app.modules.quotes import model as quotes_model  # noqa: F401 registra RF-013
 from app.modules.quote_documents import model as documents_model  # noqa: F401 RF-014
 
+from app.modules.decisions import model as decisions_model  # noqa: F401 RF-018-022
+
 config = context.config
 target_metadata = Base.metadata
 

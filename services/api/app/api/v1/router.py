@@ -43,3 +43,10 @@ api_router.include_router(quote_documents_router)
 
 from app.modules.scenarios.router import router as scenarios_router
 api_router.include_router(scenarios_router)
+
+# RF-018--RF-022: recomendaciones, auditoria y panel operativo
+from app.modules.decisions.router import router as decisions_router, audit_router
+from app.modules.operations.router import router as operations_router
+api_router.include_router(decisions_router)
+api_router.include_router(audit_router)
+api_router.include_router(operations_router)
