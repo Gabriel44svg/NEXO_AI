@@ -22,7 +22,7 @@ export default function ScenarioPanel({order}){
      setResult(body);
    }catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <section className="panel sim-panel"><div className="panel-heading"><div><h2>Laboratorio de escenarios</h2><p>RF-016 · Cambia supuestos y compara resultados, sin guardar ni aplicar cambios.</p></div><span className="soft-label">Solo propietario</span></div>
+ return <section className="panel sim-panel"><div className="panel-heading"><div><h2>Laboratorio de escenarios</h2><p>RF-016 / RF-017 · Simula supuestos, explica restricciones y calcula alternativas sin guardar cambios.</p></div><span className="soft-label">Solo propietario</span></div>
   <form className="sim-form" onSubmit={simulate}>
    <label>Producto<select required value={form.product_id} onChange={e=>change('product_id',e.target.value)}><option value="">Selecciona un producto</option>{products.map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.price_mxn)}</option>)}</select></label>
    <label>Cantidad hipotética<input required inputMode="decimal" value={form.quantity} onChange={e=>change('quantity',e.target.value)} placeholder="25.000"/></label>
@@ -42,6 +42,23 @@ export default function ScenarioPanel({order}){
      {!result.capacity&&<p>Capacidad sin evaluar: selecciona un recurso.</p>}
      {result.materials.length>0&&<div><h3>Materiales hipotéticos</h3>{result.materials.map(x=><p key={x.material_id}>{x.name}: requiere {x.required} {x.unit}, disponible {x.available}, faltante {x.shortage}</p>)}</div>}
      {!result.recipe_configured&&<p>Sin receta: no es posible evaluar suficiencia del inventario.</p>}
-  </div><p className="tiny">Este cálculo es una aproximación. No constituye una cotización aprobada ni una promesa de entrega.</p></div>}
+  </div>
+   <div className="constraint-box" aria-label="Restricciones y alternativas RF-017">
+     <h3>Restricciones y alternativa calculada · RF-017</h3>
+     <p className="constraint-state">{result.explanation.status==='blocked'?'Restricciones detectadas':result.explanation.status==='not_evaluable'?'Evaluación incompleta':'Sin faltantes en las dimensiones evaluadas'}</p>
+     {result.explanation.constraints.map((c,i)=><article key={`${c.code}-${c.material_id||i}`} className={'constraint-item '+c.severity}>
+       <b>{c.title}</b><p>{c.explanation}</p>
+       {c.shortage!==null&&<p><strong>Faltante: {c.shortage} {c.unit}</strong>{c.missing_product_units!==null&&<> · Equivale a {c.missing_product_units} unidades del producto</>}</p>}
+     </article>)}
+     {result.explanation.alternative&&<div className="constraint-alternative">
+       <b>Alternativa sin aplicar cambios</b>
+       <p>Producibles según límites evaluados: <strong>{result.explanation.alternative.units_possible_by_known_limits}</strong> unidades</p>
+       <p>Unidades por reprogramar: <strong>{result.explanation.alternative.units_to_reschedule}</strong></p>
+       {result.explanation.alternative.extra_workable_days_for_capacity!==null&&<p>Días laborables adicionales por capacidad: <strong>{result.explanation.alternative.extra_workable_days_for_capacity}</strong></p>}
+       {result.explanation.alternative.estimated_delivery_date_by_capacity&&<p>Fecha estimada por capacidad bruta: <strong>{result.explanation.alternative.estimated_delivery_date_by_capacity}</strong></p>}
+       <p>{result.explanation.alternative.description}</p>
+     </div>}
+     <p className="tiny">{result.explanation.caveat}</p>
+   </div><p className="tiny">Este cálculo es una aproximación. No constituye una cotización aprobada ni una promesa de entrega.</p></div>}
  </section>;
 }

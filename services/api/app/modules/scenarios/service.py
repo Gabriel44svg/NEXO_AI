@@ -16,6 +16,7 @@ from app.modules.scenarios.schemas import (
     CapacitySimulation, MaterialSimulation, ScenarioInput, ScenarioResult, ScenarioTotals,
 )
 from app.modules.tenancy.scope import TenantScope
+from app.modules.scenarios.explanations import explain_scenario
 
 CENT = Decimal("0.01")
 MILL = Decimal("0.001")
@@ -76,6 +77,9 @@ def evaluate(db: Session, scope: TenantScope, payload: ScenarioInput) -> Scenari
         raise HTTPException(status_code=422, detail="La simulacion permite hasta 366 dias")
 
     capacity = None
+    resource_workdays: set[int] = set()
+    resource_blackouts: set[date] = set()
+    resource_unit_compatible = True
     if payload.resource_id is not None:
         resource = db.scalar(select(ProductionResource).where(
             ProductionResource.id == payload.resource_id,
@@ -89,6 +93,9 @@ def evaluate(db: Session, scope: TenantScope, payload: ScenarioInput) -> Scenari
             ResourceBlackout.day >= start, ResourceBlackout.day <= delivery,
         )).all())
         workdays = set(resource.workdays)
+        resource_workdays = workdays
+        resource_unit_compatible = resource.unit.strip().casefold() == product.unit.strip().casefold()
+        resource_blackouts = blocked
         available_days = 0
         blocked_days = 0
         for i in range((delivery - start).days + 1):
@@ -148,6 +155,12 @@ def evaluate(db: Session, scope: TenantScope, payload: ScenarioInput) -> Scenari
         notes.append("No se selecciono recurso: la capacidad operativa no fue evaluada.")
     if not materials:
         notes.append("El producto no tiene receta: no es posible verificar suficiencia de materiales.")
+    explanation = explain_scenario(
+        quantity=qty, delivery_date=delivery, capacity=capacity,
+        materials=materials, recipe_configured=bool(materials),
+        resource_workdays=resource_workdays, resource_blackouts=resource_blackouts,
+        resource_unit_compatible=resource_unit_compatible,
+    )
     return ScenarioResult(
         order_id=order.id, product_id=product.id, delivery_date=delivery,
         original=_totals(original_quantity, product.price_mxn, product.cost_mxn) if baseline_known else None,
@@ -156,5 +169,5 @@ def evaluate(db: Session, scope: TenantScope, payload: ScenarioInput) -> Scenari
         capacity=capacity, materials=materials,
         recipe_configured=bool(materials),
         inventory_feasible_if_recipe_configured=all(m.shortage == 0 for m in materials) if materials else None,
-        editable_fields=edits, notes=notes,
+        editable_fields=edits, notes=notes, explanation=explanation,
     )

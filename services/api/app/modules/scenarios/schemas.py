@@ -61,6 +61,34 @@ class ScenarioTotals(BaseModel):
     estimated_gross_margin_mxn: Decimal
 
 
+class ConstraintExplanation(BaseModel):
+    code: str
+    kind: str
+    severity: str  # blocking | unknown
+    title: str
+    explanation: str
+    shortage: Decimal | None
+    unit: str | None
+    missing_product_units: Decimal | None
+    material_id: UUID | None = None
+
+
+class ScenarioAlternative(BaseModel):
+    units_possible_by_known_limits: Decimal
+    units_to_reschedule: Decimal
+    requested_delivery_date: date
+    extra_workable_days_for_capacity: int | None
+    estimated_delivery_date_by_capacity: date | None
+    description: str
+
+
+class ScenarioExplanation(BaseModel):
+    status: str  # blocked | not_evaluable | feasible_with_assumptions
+    constraints: list[ConstraintExplanation]
+    alternative: ScenarioAlternative | None
+    caveat: str
+
+
 class ScenarioResult(BaseModel):
     order_id: UUID
     product_id: UUID
@@ -73,6 +101,7 @@ class ScenarioResult(BaseModel):
     recipe_configured: bool
     inventory_feasible_if_recipe_configured: bool | None
     editable_fields: list[str]
+    explanation: ScenarioExplanation
     hypothetical: bool = True
     persisted: bool = False
     changes_applied: bool = False

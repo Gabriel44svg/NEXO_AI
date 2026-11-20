@@ -15,3 +15,14 @@
 .sim-secondary p{font-size:13px;margin:9px 0}
 @media(max-width:1100px){.sim-form{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:620px){.sim-form,.sim-compare{grid-template-columns:1fr}}
+
+/* RF-017: explicaciones y alternativas, sin acciones de escritura. */
+.constraint-box{margin-top:18px;padding:18px;border:1px solid #4f697f;background:#112738;border-radius:13px}
+.constraint-box h3{margin:0 0 9px;color:#e4f8f6}
+.constraint-state{color:#97d6ce;font-size:13px;font-weight:700}
+.constraint-item{padding:12px 14px;margin:9px 0;border-radius:10px;border-left:3px solid #bb8d50;background:#1f3042}
+.constraint-item.unknown{border-left-color:#6a8caa}
+.constraint-item b{font-size:13px}.constraint-item p{font-size:12px;margin:6px 0 0}
+.constraint-item strong{color:#f1c689}
+.constraint-alternative{padding:15px;margin-top:14px;background:#143a3d;border:1px solid #3e9587;border-radius:11px}
+.constraint-alternative>b{color:#79e8d2}.constraint-alternative p{font-size:12px;margin:9px 0 0;color:#d1e5e3}

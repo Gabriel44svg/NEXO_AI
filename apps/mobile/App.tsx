@@ -34,12 +34,19 @@ type ScenarioResource = { id: string; name: string; unit: string; daily_capacity
 type ScenarioMaterial = {material_id: string; name: string; unit: string; required: string; available: string; shortage: string};
 type ScenarioTotals = {quantity: string; unit_price_mxn: string; unit_cost_mxn: string;
   revenue_mxn: string; direct_cost_mxn: string; estimated_gross_margin_mxn: string};
+type ScenarioConstraint = {code: string; kind: string; severity: 'blocking'|'unknown'; title: string;
+  explanation: string; shortage: string|null; unit: string|null; missing_product_units: string|null; material_id: string|null};
+type ScenarioAlternative = {units_possible_by_known_limits: string; units_to_reschedule: string;
+  requested_delivery_date: string; extra_workable_days_for_capacity: number|null;
+  estimated_delivery_date_by_capacity: string|null; description: string};
+type ScenarioExplanation = {status: 'blocked'|'not_evaluable'|'feasible_with_assumptions';
+  constraints: ScenarioConstraint[]; alternative: ScenarioAlternative|null; caveat: string};
 type ScenarioResult = {order_id: string; product_id: string; delivery_date: string;
   hypothetical: boolean; persisted: boolean; changes_applied: boolean;
   original: ScenarioTotals | null; original_delivery_date: string | null; simulated: ScenarioTotals;
   capacity: null | {name: string; unit: string; available_capacity: string; shortage: string; workable_days: number;
     daily_capacity: string; includes_existing_commitments: boolean};
-  materials: ScenarioMaterial[]; recipe_configured: boolean; inventory_feasible_if_recipe_configured: boolean|null; notes: string[]};
+  materials: ScenarioMaterial[]; recipe_configured: boolean; inventory_feasible_if_recipe_configured: boolean|null; notes: string[]; explanation: ScenarioExplanation};
 type QuoteTaxConfig = { configured: boolean; tax_percent: string | null };
 type QuoteLineResult = {
   product_id: string; product_name: string; product_sku: string;
@@ -986,7 +993,7 @@ export default function App() {
                 </View>
               ) : tab === 'sim' ? (
                 <View style={styles.section}>
-                  <Text style={styles.subtitle}>Simular escenarios · RF-016</Text>
+                  <Text style={styles.subtitle}>Simular escenarios · RF-016 / RF-017</Text>
                   <Text style={styles.notice}>SOLO SIMULACION. No altera pedidos, precios, recursos o existencias.</Text>
                   <ActionButton label="Cargar pedidos, productos y recursos" disabled={busy} secondary
                     onPress={() => { void loadSimWorkspace(); }} />
@@ -1049,6 +1056,29 @@ export default function App() {
                       {m.name}: requiere {m.required} {m.unit}, disponibles {m.available}, faltan {m.shortage}.
                     </Text>)}
                     {!simResult.recipe_configured && <Text style={styles.notice}>Sin receta: inventario no evaluable.</Text>}
+                    <Text style={styles.subtitle}>Restricciones y alternativas · RF-017</Text>
+                    <Text style={styles.saved}>{simResult.explanation.status === 'blocked' ? 'Restricciones detectadas' :
+                      simResult.explanation.status === 'not_evaluable' ? 'Faltan datos para evaluar' :
+                      'Sin faltantes en los aspectos evaluados'}</Text>
+                    {simResult.explanation.constraints.map((item, i) => <View key={`${item.code}-${item.material_id ?? i}`}
+                      style={styles.orderRow}>
+                      <Text style={styles.saved}>{item.title}</Text>
+                      <Text style={styles.help}>{item.explanation}</Text>
+                      {item.shortage !== null && <Text style={styles.notice}>
+                        Faltante: {item.shortage} {item.unit}. Equivale a {item.missing_product_units} unidades del producto.
+                      </Text>}
+                    </View>)}
+                    {!!simResult.explanation.alternative && <View style={styles.orderRow}>
+                      <Text style={styles.subtitle}>Alternativa calculada (sin aplicar)</Text>
+                      <Text style={styles.saved}>Unidades viables segun limites evaluados: {simResult.explanation.alternative.units_possible_by_known_limits}</Text>
+                      <Text style={styles.saved}>Unidades por reprogramar: {simResult.explanation.alternative.units_to_reschedule}</Text>
+                      {simResult.explanation.alternative.extra_workable_days_for_capacity !== null &&
+                        <Text style={styles.help}>Dias laborables adicionales: {simResult.explanation.alternative.extra_workable_days_for_capacity}</Text>}
+                      {!!simResult.explanation.alternative.estimated_delivery_date_by_capacity &&
+                        <Text style={styles.help}>Fecha estimada por capacidad: {simResult.explanation.alternative.estimated_delivery_date_by_capacity}</Text>}
+                      <Text style={styles.help}>{simResult.explanation.alternative.description}</Text>
+                    </View>}
+                    <Text style={styles.notice}>{simResult.explanation.caveat}</Text>
                     <Text style={styles.notice}>No se ha confirmado ni guardado ningun cambio.</Text>
                   </View>}
                 </View>
