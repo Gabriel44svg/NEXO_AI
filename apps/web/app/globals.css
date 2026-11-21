@@ -59,3 +59,10 @@
 .mg-metrics small{font-size:.75rem}.mg-metrics strong{font-size:1.1rem}
 .join-form{margin-top:14px}.join-form summary{cursor:pointer;font-weight:600}
 @media(max-width:700px){.mg-row{align-items:stretch;flex-direction:column}.mg-row>label,.mg-row>input{width:100%}.mg-tabs{overflow-x:auto;flex-wrap:nowrap}}
+
+/* RIA-001..005: accessible assistance forms, all on existing dark palette */
+.mg-hub{margin-top:22px}
+.mg-hub textarea{display:block;resize:vertical;min-height:80px;width:100%;border:1px solid #3f6678;border-radius:9px;background:#092333;color:#e9fbfd;padding:12px;font:inherit}
+.mg-hub .mg-item{overflow-wrap:anywhere}
+.mg-hub .mg-form button{justify-self:start}
+@media(max-width:650px){.mg-hub .mg-form button{width:100%}}

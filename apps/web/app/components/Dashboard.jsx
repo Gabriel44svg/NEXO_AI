@@ -5,6 +5,7 @@ import OperationalOverview from './OperationalOverview.jsx';
 import AuditTrail from './AuditTrail.jsx';
 import ManagementHub,{JoinInvitation} from './ManagementHub.jsx';
 import ExtensionsHub from './ExtensionsHub.jsx';
+import AIHub from './AIHub.jsx';
 
 const STATES={draft:'Borrador',pending:'Pendiente',confirmed:'Confirmado',in_progress:'En proceso',completed:'Completado',cancelled:'Cancelado'};
 const MONEY=new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'});
@@ -136,6 +137,7 @@ export default function Dashboard(){
       {chosen&&person.role==='owner'&&<AuditTrail orderId={chosen}/>}
       {chosen&&current&&person.role==='owner'&&<ScenarioPanel order={current}/>}
       <ExtensionsHub owner={person.role==='owner'}/>
+      <AIHub/>
       <footer className="footer">NEXO AI · RF-015 · Consultas autenticadas · Datos de la misma API · No se crean copias desde la web</footer>
     </div>
   </main>;

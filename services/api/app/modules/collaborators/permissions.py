@@ -7,7 +7,7 @@ PERMISSIONS=frozenset({
  'inventory.read','capacity.read',
  'dashboard.read','calendar.read','calendar.write','purchasing.read','purchasing.write',
  'notifications.read','notifications.write','reports.read','organization.read',
- 'documents.read','documents.write','templates.read',
+ 'documents.read','documents.write','templates.read','ai.read','ai.write',
 })
 
 def validate_permissions(values):
@@ -27,7 +27,7 @@ def required_for_path(path,method):
        ('/api/v1/quotes','quotes'),('/api/v1/products','products'),('/api/v1/materials','inventory'),
        ('/api/v1/capacity','capacity'),('/api/v1/operations','dashboard'),('/api/v1/purchasing','purchasing'),
        ('/api/v1/scheduling','calendar'),('/api/v1/notifications','notifications'),('/api/v1/reports','reports'),
-       ('/api/v1/organizations/me','organization'),('/api/v1/documents/ocr','documents'),('/api/v1/sector-templates','templates')]
+       ('/api/v1/organizations/me','organization'),('/api/v1/ai','ai'),('/api/v1/documents/ocr','documents'),('/api/v1/sector-templates','templates')]
     for prefix,name in prefixes:
         if path==prefix or path.startswith(prefix+'/'):
             # routes with read-only permission: reject writes for restricted operators

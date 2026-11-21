@@ -11,6 +11,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import ManagementMobile,{JoinInviteMobile} from './components/ManagementMobile';
 import ExtensionsMobile from './components/ExtensionsMobile';
+import AIStudioMobile from './components/AIStudioMobile';
 import { fetch as expoFetch } from 'expo/fetch';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
@@ -157,7 +158,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim' | 'manage' | 'extensions'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim' | 'manage' | 'extensions' | 'ai'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -859,6 +860,9 @@ export default function App() {
                 <Pressable onPress={() => setTab('sim')} style={[styles.tab, tab === 'sim' && styles.tabActive]}>
                   <Text style={styles.tabText}>Simular</Text>
                 </Pressable>
+                <Pressable onPress={() => setTab('ai')} style={[styles.tab, tab === 'ai' && styles.tabActive]}>
+                  <Text style={styles.tabText}>Asistente IA</Text>
+                </Pressable>
                 <Pressable onPress={() => setTab('extensions')} style={[styles.tab, tab === 'extensions' && styles.tabActive]}>
                   <Text style={styles.tabText}>IA y extras</Text>
                 </Pressable>
@@ -866,7 +870,11 @@ export default function App() {
                   <Text style={styles.tabText}>Gestion</Text>
                 </Pressable>
               </View>
-              {tab === 'extensions' ? (
+              {tab === 'ai' ? (
+                <AIStudioMobile call={(path,method='GET',body)=>apiRequest(path,{
+                  method,headers:{...auth,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
+                })}/>
+              ) : tab === 'extensions' ? (
                 <ExtensionsMobile call={(path,method='GET',body)=>apiRequest(path,{
                   method,headers:{...auth,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
                 })} upload={async(file)=>{
@@ -1300,7 +1308,7 @@ export default function App() {
           {busy && <ActivityIndicator color="#5EEAD4" />}
           {!!message && <Text style={styles.message} accessibilityRole="alert">{message}</Text>}
           <Text style={styles.footer}>Los pedidos se confirman solo después de guardar la revisión humana.</Text>
-          <Text style={styles.footer}>La transcripcion y extraccion automatica se integraran en una etapa posterior.</Text>
+          <Text style={styles.footer}>La transcripción asistida está disponible en Asistente IA; revisa siempre antes de confirmar.</Text>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

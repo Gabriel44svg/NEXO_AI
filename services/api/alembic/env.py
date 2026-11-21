@@ -28,6 +28,8 @@ from app.modules.notifications import model as notifications_model  # noqa: F401
 
 from app.modules.extensions import model as extensions_model  # noqa: F401 RF-028..RF-032
 
+from app.modules.ai import model as ai_model  # noqa: F401 RIA-001..RIA-005
+
 config = context.config
 target_metadata = Base.metadata
 

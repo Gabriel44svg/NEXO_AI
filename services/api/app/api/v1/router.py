@@ -71,3 +71,7 @@ from app.modules.extensions.templates import router as sector_templates_router
 from app.modules.extensions.agents import router as agent_router
 for ext_router in (subscription_router, ocr_router, messaging_router, sector_templates_router, agent_router):
     api_router.include_router(ext_router)
+
+# RIA-001..RIA-005: transcription, extraction, validation, provenance, baseline estimates
+from app.modules.ai.router import router as ai_router
+api_router.include_router(ai_router)
