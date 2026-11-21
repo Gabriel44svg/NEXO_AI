@@ -42,3 +42,20 @@
 .decision-confirm label.check{display:flex;align-items:flex-start;gap:8px}
 .ops-panel .notice{color:#efcbaa}
 @media(max-width:800px){.ops-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* RF-023..027: gestión empresarial responsive */
+.management{margin-top:20px}.mg-tabs,.mg-row,.mg-flex{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.mg-tabs{margin:12px 0 20px}.mg-tabs button{white-space:nowrap}
+.mg-section{display:grid;gap:12px}.mg-section h3{margin:0}.mg-section h4{margin:6px 0}
+.mg-form{display:grid;gap:10px;margin:8px 0 16px}.mg-row>label{min-width:155px;flex:1}
+.mg-row>input{min-width:135px;flex:1}.mg-section label{display:grid;gap:5px}
+.mg-section input,.mg-section select,.join-form input{min-width:0;width:100%;max-width:100%}
+.mg-checks{display:flex;flex-wrap:wrap;gap:10px;padding:9px 0}
+.mg-check{display:flex!important;align-items:center;gap:6px;font-size:.8rem;color:var(--text-secondary,#9ba8b5);min-width:150px}
+.mg-check input{width:auto!important}.mg-flex{justify-content:space-between}.mg-item{border:1px solid rgba(148,163,184,.2);border-radius:12px;padding:12px;margin:4px 0}
+.mg-item p{margin:6px 0}.mg-token{overflow-wrap:anywhere;font-family:monospace;font-size:.8rem}
+.mg-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px;margin:12px 0}
+.mg-metrics>div{display:grid;gap:6px;background:rgba(100,116,139,.1);padding:14px;border-radius:12px}
+.mg-metrics small{font-size:.75rem}.mg-metrics strong{font-size:1.1rem}
+.join-form{margin-top:14px}.join-form summary{cursor:pointer;font-weight:600}
+@media(max-width:700px){.mg-row{align-items:stretch;flex-direction:column}.mg-row>label,.mg-row>input{width:100%}.mg-tabs{overflow-x:auto;flex-wrap:nowrap}}

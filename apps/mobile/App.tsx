@@ -9,6 +9,7 @@ import {
 } from 'expo-audio';
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
+import ManagementMobile,{JoinInviteMobile} from './components/ManagementMobile';
 import { fetch as expoFetch } from 'expo/fetch';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
@@ -155,7 +156,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim' | 'manage'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -816,7 +817,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Captura, cotizaciones y PDF · RF-014</Text>
+          <Text style={styles.caption}>Operaciones, decisiones y administración · RF-027</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -831,6 +832,9 @@ export default function App() {
                 accessibilityLabel="Contrasena" value={password} onChangeText={setPassword}
                 secureTextEntry autoCapitalize="none" />
               <ActionButton label="Iniciar sesion" onPress={logIn} disabled={busy} />
+              <JoinInviteMobile call={(path,method='GET',body)=>apiRequest(path,{
+                method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
+              })}/>
             </View>
           ) : (
             <View style={styles.card}>
@@ -854,8 +858,15 @@ export default function App() {
                 <Pressable onPress={() => setTab('sim')} style={[styles.tab, tab === 'sim' && styles.tabActive]}>
                   <Text style={styles.tabText}>Simular</Text>
                 </Pressable>
+                <Pressable onPress={() => setTab('manage')} style={[styles.tab, tab === 'manage' && styles.tabActive]}>
+                  <Text style={styles.tabText}>Gestion</Text>
+                </Pressable>
               </View>
-              {tab === 'voice' ? (
+              {tab === 'manage' ? (
+                <ManagementMobile token={token} call={(path,method='GET',body)=>apiRequest(path,{
+                  method,headers:{...auth,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
+                })}/>
+              ) : tab === 'voice' ? (
                 <View style={styles.section}>
                   <Text style={styles.help}>El microfono solo se solicita al comenzar a grabar.</Text>
                   {micDenied && <Text style={styles.notice}>Permiso denegado. Usa la pestaña Texto manual.</Text>}

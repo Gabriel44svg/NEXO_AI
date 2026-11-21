@@ -50,3 +50,15 @@ from app.modules.operations.router import router as operations_router
 api_router.include_router(decisions_router)
 api_router.include_router(audit_router)
 api_router.include_router(operations_router)
+
+# RF-023 a RF-027
+from app.modules.collaborators.router import router as collaborators_router
+from app.modules.purchasing.router import router as purchasing_router
+from app.modules.scheduling.router import router as scheduling_router
+from app.modules.notifications.router import router as notifications_router
+from app.modules.reports.router import router as reports_router
+api_router.include_router(collaborators_router)
+api_router.include_router(purchasing_router)
+api_router.include_router(scheduling_router)
+api_router.include_router(notifications_router)
+api_router.include_router(reports_router)

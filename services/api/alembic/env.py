@@ -21,6 +21,11 @@ from app.modules.quote_documents import model as documents_model  # noqa: F401 R
 
 from app.modules.decisions import model as decisions_model  # noqa: F401 RF-018-022
 
+from app.modules.collaborators import model as collaborators_model  # noqa: F401
+from app.modules.purchasing import model as purchasing_model  # noqa: F401
+from app.modules.scheduling import model as scheduling_model  # noqa: F401
+from app.modules.notifications import model as notifications_model  # noqa: F401
+
 config = context.config
 target_metadata = Base.metadata
 

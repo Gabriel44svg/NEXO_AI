@@ -3,7 +3,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String,
+    Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text,
     UniqueConstraint, Uuid, func, text,
 )
 from sqlalchemy.orm import Mapped, mapped_column
@@ -28,6 +28,7 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(20), nullable=False, server_default=text("'owner'"))
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    permissions_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     failed_login_attempts: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
