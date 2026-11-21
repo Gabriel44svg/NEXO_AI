@@ -10,8 +10,8 @@ export default function OperationalOverview(){
   }catch(e){setError(e.message)}
  }
  useEffect(()=>{reload();const t=setInterval(()=>{if(document.visibilityState==='visible')reload()},10000);return()=>clearInterval(t)},[]);
- return <section className="panel ops-panel" aria-label="Panel operativo RF-020">
-  <div className="panel-heading"><div><h2>Panel operativo · RF-020</h2><p>Indicadores reales del backend, no estimaciones del navegador.</p></div><button className="outline" onClick={()=>{void reload()}}>Actualizar</button></div>
+ return <section className="panel ops-panel" aria-label="Panel operativo">
+  <div className="panel-heading"><div><h2>Panel operativo</h2><p>Indicadores reales del backend, no estimaciones del navegador.</p></div><button className="outline" onClick={()=>{void reload()}}>Actualizar</button></div>
   {error&&<p className="alert">{error}</p>}
   {data&&<><div className="ops-grid">
     <div><small>Pedidos abiertos</small><strong>{data.open_orders}</strong></div>

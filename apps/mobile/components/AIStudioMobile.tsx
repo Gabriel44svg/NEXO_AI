@@ -39,7 +39,7 @@ export default function AIStudioMobile({call}:Props){
  async function estimate(){await run(async()=>{const x=await call('/ai/estimates','POST',{product_id:fields.product_id,
  quantity,requested_date:fields.requested_date||null,resource_id:resource||null});setPrediction(x);setMessage('Baseline calculado sin reservar capacidad.')})}
  function edit(k:keyof typeof EMPTY,v:string){setFields(p=>({...p,[k]:v}));setValidation(null)}
- return <View style={S.card}><Text style={S.title}>Asistente · RIA-001 a RIA-005</Text>
+ return <View style={S.card}><Text style={S.title}>Asistente IA</Text>
  <Hint>Whisper local opcional, reglas de extracción trazables y pronóstico operativo base. Revisión humana obligatoria. Ningún pedido se confirma automáticamente.</Hint>
  <View style={S.row}>{[['extract','Extracción'],['voice','Voz IA'],['estimate','Pronóstico']].map(([id,label])=><Pressable key={id} style={[S.chip,tab===id&&S.selected]} onPress={()=>setTab(id as typeof tab)}><Text style={S.label}>{label}</Text></Pressable>)}</View>
  {!!message&&<Label>{message}</Label>}

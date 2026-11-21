@@ -8,7 +8,7 @@ export default function AuditTrail({orderId}){
     .then(b=>{if(live)setItems(b.items)}).catch(e=>{if(live)setError(e.message)});
    return()=>{live=false};
  },[orderId]);
- return <section className="panel"><h2>Auditoría inmutable · RF-019</h2>
+ return <section className="panel"><h2>Auditoría inmutable</h2>
   {error&&<p className="alert">{error}</p>}
   {items.length===0&&!error&&<p className="tiny">Sin eventos de auditoría de este pedido.</p>}
   {items.map(e=><div className="history-item" key={e.id}><b>{e.action}</b>

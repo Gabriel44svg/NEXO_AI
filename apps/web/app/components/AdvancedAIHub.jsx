@@ -51,9 +51,9 @@ export default function AdvancedAIHub({owner=false}){
   });}
  async function approve(m,what){if(!owner||!window.confirm(`¿${what==='promote'?'Aprobar despliegue':'Restaurar versión archivada'} ${m.version}?`))return;
   await run(()=>api(`models/${m.id}/${what}`,'POST',{confirm:true}));}
- const headings=[['optimization','RIA-009 a 011 · Escenarios'],['forecast','RIA-008/012 · Pronóstico'],['agent','RIA-013 a 015 · Agente'],['twin','RIA-018 · Gemelo Monte Carlo'],['models','RIA-006/007/012/017 · Modelos'],['quality','RIA-016 · Calidad'],['runs','Evidencia']];
- return <section className="panel mg-hub"><div className="panel-heading"><div><h2>IA verificable · RIA-006 a RIA-018</h2>
- <p>Evaluación temporal, alternativas factibles y agentes supervisados. Nada modifica pedidos, compras o precios.</p></div><span className="soft-label">13 requisitos</span></div>
+ const headings=[['optimization','Escenarios'],['forecast','Pronóstico'],['agent','Agente'],['twin','Gemelo digital'],['models','Modelos'],['quality','Calidad'],['runs','Evidencia']];
+ return <section className="panel mg-hub"><div className="panel-heading"><div><h2>IA avanzada</h2>
+ <p>Evaluación temporal, alternativas factibles y agentes supervisados. Nada modifica pedidos, compras o precios.</p></div><span className="soft-label">Análisis supervisado</span></div>
  <div className="mg-tabs">{headings.map(([k,t])=><button key={k} type="button" className={tab===k?'primary':'outline'} onClick={()=>{setTab(k);setR(null)}}>{t}</button>)}</div>
  {message&&<p role="status" className="tiny">{message}</p>}
  {['optimization','forecast','agent','twin'].includes(tab)&&<Part title={headings.find(x=>x[0]===tab)?.[1]} note="Todas las estimaciones son orientativas. El usuario debe revisar el catálogo, la capacidad y los límites antes de decidir.">

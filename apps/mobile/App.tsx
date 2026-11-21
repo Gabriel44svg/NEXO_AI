@@ -524,7 +524,7 @@ export default function App() {
 
   async function loadSimWorkspace() {
     if (!token || busy) return;
-    setBusy(true); setMessage('Cargando escenarios RF-016...');
+    setBusy(true); setMessage('Cargando escenarios...');
     try {
       const [orders, products, resources, summary] = await Promise.all([
         apiRequest<SearchPage>('/orders/search?limit=100', { method: 'GET', headers: auth }),
@@ -820,7 +820,7 @@ export default function App() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled">
           <Text style={styles.brand}>NEXO AI</Text>
           <Text style={styles.heading}>Solicitudes inteligentes</Text>
-          <Text style={styles.caption}>Operaciones, decisiones y extensiones · RF-032</Text>
+          <Text style={styles.caption}>Operaciones, decisiones e inteligencia artificial</Text>
 
           {!token ? (
             <View style={styles.card}>
@@ -1008,7 +1008,7 @@ export default function App() {
                 </View>
               ) : tab === 'quote' ? (
                 <View style={styles.section}>
-                  <Text style={styles.subtitle}>Costeo y cotización · RF-013</Text>
+                  <Text style={styles.subtitle}>Costeo y cotización</Text>
                   <Text style={styles.help}>Se usan precios aprobados en el catálogo. El cálculo no confirma pedidos ni consume inventario.</Text>
                   <ActionButton label="Cargar productos, pedidos e impuestos" onPress={loadQuoteWorkspace}
                     disabled={busy} secondary />
@@ -1117,12 +1117,12 @@ export default function App() {
                 </View>
               ) : tab === 'sim' ? (
                 <View style={styles.section}>
-                  <Text style={styles.subtitle}>Simular escenarios · RF-016 / RF-017</Text>
+                  <Text style={styles.subtitle}>Simular escenarios</Text>
                   <Text style={styles.notice}>SOLO SIMULACION. No altera pedidos, precios, recursos o existencias.</Text>
                   <ActionButton label="Cargar pedidos, productos y recursos" disabled={busy} secondary
                     onPress={() => { void loadSimWorkspace(); }} />
                   {!!opsSummary && <View style={styles.orderRow}>
-                    <Text style={styles.subtitle}>Panel operativo · RF-020</Text>
+                    <Text style={styles.subtitle}>Panel operativo</Text>
                     <Text style={styles.saved}>Abiertos: {opsSummary.open_orders} · Proximos: {opsSummary.due_soon} · Vencidos: {opsSummary.overdue}</Text>
                     {opsSummary.alerts.map(a=><Text key={a.code} style={styles.notice}>{a.message}</Text>)}
                   </View>}
@@ -1185,7 +1185,7 @@ export default function App() {
                       {m.name}: requiere {m.required} {m.unit}, disponibles {m.available}, faltan {m.shortage}.
                     </Text>)}
                     {!simResult.recipe_configured && <Text style={styles.notice}>Sin receta: inventario no evaluable.</Text>}
-                    <Text style={styles.subtitle}>Restricciones y alternativas · RF-017</Text>
+                    <Text style={styles.subtitle}>Restricciones y alternativas</Text>
                     <Text style={styles.saved}>{simResult.explanation.status === 'blocked' ? 'Restricciones detectadas' :
                       simResult.explanation.status === 'not_evaluable' ? 'Faltan datos para evaluar' :
                       'Sin faltantes en los aspectos evaluados'}</Text>
@@ -1209,7 +1209,7 @@ export default function App() {
                     </View>}
                     <Text style={styles.notice}>{simResult.explanation.caveat}</Text>
                     <Text style={styles.notice}>No se ha confirmado ni guardado ningun cambio.</Text>
-                    <Text style={styles.subtitle}>Decisión explícita · RF-018 / RF-022</Text>
+                    <Text style={styles.subtitle}>Decisión explícita</Text>
                     <ActionButton label="Guardar recomendacion sin aplicar" disabled={busy}
                       onPress={() => { void proposeDecision(); }}/>
                     {!!decisionRec && <View style={styles.orderRow}>

@@ -52,8 +52,8 @@ export default function DecisionPanel({order,scenario,onApplied}){
   }catch(e){setError(e.message+' · Si hubo fallo de red, puedes reintentar sin duplicar la confirmación.');}
   finally{setBusy(false)}
  }
- return <section className="decision-section" aria-label="Decisiones controladas RF-018 a RF-022">
-  <h3>Decisión humana y trazabilidad · RF-018–RF-022</h3>
+ return <section className="decision-section" aria-label="Decisiones controladas">
+  <h3>Decisión humana y trazabilidad</h3>
   <p className="tiny">Primero guarda la propuesta. Guardarla no altera el pedido. Para aplicarla es necesaria una confirmación adicional del propietario.</p>
   {error&&<p className="alert" role="alert">{error}</p>}
   <button className="outline" type="button" onClick={propose} disabled={busy||!scenario||!['draft','pending'].includes(order.status)}>
@@ -71,7 +71,7 @@ export default function DecisionPanel({order,scenario,onApplied}){
     </div>}
     {rec.status==='applied'&&<p className="sim-safe">Aplicación confirmada y auditada. Estado del pedido: {rec.applied_order_status}.</p>}
   </div>}
-  <h3>Historial de recomendaciones · RF-021</h3>
+  <h3>Historial de recomendaciones</h3>
   {!loaded&&<p className="tiny">Consultando historial…</p>}
   {items.length===0&&loaded&&<p className="tiny">Aún no hay recomendaciones guardadas para este pedido.</p>}
   {items.map(x=><div className="history-item" key={x.id}>

@@ -23,7 +23,7 @@ export default function ScenarioPanel({order}){
      setResult(body);
    }catch(e){setError(e.message)}finally{setBusy(false)}
  }
- return <section className="panel sim-panel"><div className="panel-heading"><div><h2>Laboratorio de escenarios</h2><p>RF-016 / RF-017 · Simula supuestos, explica restricciones y calcula alternativas sin guardar cambios.</p></div><span className="soft-label">Solo propietario</span></div>
+ return <section className="panel sim-panel"><div className="panel-heading"><div><h2>Laboratorio de escenarios</h2><p>Simula supuestos, explica restricciones y calcula alternativas sin guardar cambios.</p></div><span className="soft-label">Solo propietario</span></div>
   <form className="sim-form" onSubmit={simulate}>
    <label>Producto<select required value={form.product_id} onChange={e=>change('product_id',e.target.value)}><option value="">Selecciona un producto</option>{products.map(p=><option key={p.id} value={p.id}>{p.name} · {money(p.price_mxn)}</option>)}</select></label>
    <label>Cantidad hipotética<input required inputMode="decimal" value={form.quantity} onChange={e=>change('quantity',e.target.value)} placeholder="25.000"/></label>
@@ -44,8 +44,8 @@ export default function ScenarioPanel({order}){
      {result.materials.length>0&&<div><h3>Materiales hipotéticos</h3>{result.materials.map(x=><p key={x.material_id}>{x.name}: requiere {x.required} {x.unit}, disponible {x.available}, faltante {x.shortage}</p>)}</div>}
      {!result.recipe_configured&&<p>Sin receta: no es posible evaluar suficiencia del inventario.</p>}
   </div>
-   <div className="constraint-box" aria-label="Restricciones y alternativas RF-017">
-     <h3>Restricciones y alternativa calculada · RF-017</h3>
+   <div className="constraint-box" aria-label="Restricciones y alternativas">
+     <h3>Restricciones y alternativa calculada</h3>
      <p className="constraint-state">{result.explanation.status==='blocked'?'Restricciones detectadas':result.explanation.status==='not_evaluable'?'Evaluación incompleta':'Sin faltantes en las dimensiones evaluadas'}</p>
      {result.explanation.constraints.map((c,i)=><article key={`${c.code}-${c.material_id||i}`} className={'constraint-item '+c.severity}>
        <b>{c.title}</b><p>{c.explanation}</p>

@@ -39,7 +39,7 @@ function Team(){
  async function load(){try{const [u,p]=await Promise.all([api('collaborators/users'),api('collaborators/permissions')]);setUsers(u);setAll(p);}catch(e){setMessage(e.message)}}
  useEffect(()=>{void load()},[]);
  async function create(e){e.preventDefault();try{const data=await api('collaborators/invitations','POST',{email,permissions:perms,expires_hours:24});setSecret(data.token);setMessage('Invitación creada: '+email+'. Comparte el token por un canal privado; no se envió automáticamente.');setEmail('');}catch(e){setMessage(e.message)}}
- return <Shell title="RF-023 · Equipo y permisos" description="Invitaciones de 24 horas, activación por token y suspensión de sesiones.">
+ return <Shell title="Equipo y permisos" description="Invitaciones de 24 horas, activación por token y suspensión de sesiones.">
  <form className="mg-form" onSubmit={create}><label>Correo del colaborador<input type="email" required value={email} onChange={e=>setEmail(e.target.value)}/></label>
  <div className="mg-checks">{all.map(p=><label className="mg-check" key={p}><input type="checkbox" checked={perms.includes(p)} onChange={e=>setPerms(prev=>e.target.checked?[...prev,p]:prev.filter(x=>x!==p))}/>{p}</label>)}</div>
  <button className="primary">Crear invitación de un solo uso</button></form>
@@ -59,7 +59,7 @@ function Purchasing({owner}){
  async function submitSupplier(e){e.preventDefault();try{await api('purchasing/suppliers','POST',{code:sCode,name:sName});setMsg('Proveedor creado');setSName('');setSCode('');await load()}catch(e){setMsg(e.message)}}
  async function submitPurchase(e){e.preventDefault();try{await api('purchasing/requests','POST',{supplier_id:supplier,material_id:material,quantity,unit_cost_mxn:unitCost});setMsg('Solicitud pendiente de aprobación');setQuantity('');await load()}catch(e){setMsg(e.message)}}
  async function decide(id,decision){try{await api('purchasing/requests/'+id+'/decision','POST',{decision,note:note||'Decisión explícita del propietario'});setMsg('Decisión registrada');await load()}catch(e){setMsg(e.message)}}
- return <Shell title="RF-024 · Proveedores y compras" description="La aprobación no incrementa automáticamente las existencias; la recepción es una operación separada.">
+ return <Shell title="Proveedores y compras" description="La aprobación no incrementa automáticamente las existencias; la recepción es una operación separada.">
  {owner&&<form className="mg-form" onSubmit={submitSupplier}><h4>Alta de proveedor</h4><div className="mg-row"><input required placeholder="Código (ej. PROV01)" value={sCode} onChange={e=>setSCode(e.target.value)}/><input required placeholder="Razón social" value={sName} onChange={e=>setSName(e.target.value)}/><button className="primary">Crear proveedor</button></div></form>}
  <form className="mg-form" onSubmit={submitPurchase}><h4>Solicitar abastecimiento</h4><div className="mg-row"><label>Proveedor<select required value={supplier} onChange={e=>setSupplier(e.target.value)}>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
  <label>Material<select required value={material} onChange={e=>setMaterial(e.target.value)}>{materials.map(m=><option key={m.id} value={m.id}>{m.name} ({m.unit})</option>)}</select></label>
@@ -76,7 +76,7 @@ function Calendar({owner,orders}){
  useEffect(()=>{void load()},[day]);
  async function allocate(e){e.preventDefault();try{await api('scheduling/allocations','POST',{resource_id:resource,order_id:order,day,quantity:qty});setMsg('Asignación registrada');setQty('');await load()}catch(e){setMsg(e.message)}}
  async function remove(id){try{await api('scheduling/allocations/'+id,'DELETE');setMsg('Asignación cancelada');await load()}catch(e){setMsg(e.message)}}
- return <Shell title="RF-025 · Calendario de carga" description="Ocupación y capacidad restante por recurso y día, solo para asignaciones explícitas."><label>Fecha <input type="date" value={day} onChange={e=>setDay(e.target.value)}/></label>
+ return <Shell title="Calendario de carga" description="Ocupación y capacidad restante por recurso y día, solo para asignaciones explícitas."><label>Fecha <input type="date" value={day} onChange={e=>setDay(e.target.value)}/></label>
  <Feedback text={msg}/>{data?.resources.map(r=><div className="mg-item" key={r.resource_id}><strong>{r.resource_name}</strong><p>{r.occupied} / {r.capacity} {r.unit} ocupadas · <strong>{r.remaining} restantes</strong></p>
  {!r.working&&<p className="tiny">Día no laborable o bloqueado</p>}{r.allocations.map(a=><p className="tiny" key={a.id}>Pedido {a.order_id.slice(0,8)} · {a.quantity} {r.unit} {owner&&<button className="link" onClick={()=>remove(a.id)}>Cancelar</button>}</p>)}</div>)}
  {owner&&<form onSubmit={allocate} className="mg-form"><h4>Asignar un pedido confirmado</h4><div className="mg-row"><label>Recurso<select value={resource} onChange={e=>setResource(e.target.value)}>{data?.resources.map(r=><option key={r.resource_id} value={r.resource_id}>{r.resource_name}</option>)}</select></label>
@@ -91,7 +91,7 @@ function Notifications(){
  async function save(){try{await api('notifications/preferences','PUT',prefs);setMsg('Preferencias guardadas')}catch(e){setMsg(e.message)}}
  async function scan(){try{const r=await api('notifications/scan','POST',{});setMsg(`${r.created} nueva(s) alerta(s); ${r.signals_evaluated} eventos evaluados.`);await load()}catch(e){setMsg(e.message)}}
  const labels={due_soon:'Fecha próxima (7 días)',risk:'Riesgo por entrega vencida',material_shortage:'Material insuficiente'};
- return <Shell title="RF-026 · Alertas configurables" description="Alertas internas bajo demanda. No se envían mensajes push ni correos."><div className="mg-checks">
+ return <Shell title="Alertas configurables" description="Alertas internas bajo demanda. No se envían mensajes push ni correos."><div className="mg-checks">
  {Object.entries(labels).map(([k,v])=><label className="mg-check" key={k}><input type="checkbox" checked={prefs[k]} onChange={e=>setPrefs(x=>({...x,[k]:e.target.checked}))}/>{v}</label>)}</div>
  <div className="mg-row"><button className="primary" onClick={save}>Guardar preferencias</button><button className="outline" onClick={scan}>Evaluar alertas ahora</button></div>
  <Feedback text={msg}/><h4>Notificaciones internas</h4>{entries.length===0&&<p className="tiny">No hay alertas emitidas.</p>}{entries.map(e=><div className="mg-item" key={e.id}><strong>{labels[e.kind]||e.kind}</strong><p>{e.message}</p><p className="tiny">{e.created_at||''}</p></div>)}</Shell>;
@@ -101,7 +101,7 @@ function Reports(){
  function query(includeFormat=''){const q=new URLSearchParams();if(includeFormat)q.set('format',includeFormat);Object.entries(filters).forEach(([k,v])=>{if(v)q.set(k,v)});return q.toString()}
  async function load(){try{setData(await api('reports/summary?'+query()));setMsg('Reporte actualizado')}catch(e){setMsg(e.message)}}
  useEffect(()=>{void load()},[]);
- return <Shell title="RF-027 · Informes exportables" description="Reportes de pedidos, cumplimiento y márgenes. Los ingresos corresponden a cotizaciones aprobadas, no a cobros.">
+ return <Shell title="Informes exportables" description="Reportes de pedidos, cumplimiento y márgenes. Los ingresos corresponden a cotizaciones aprobadas, no a cobros.">
  <div className="mg-row"><label>Desde<input type="date" value={filters.date_from} onChange={e=>setFilters(x=>({...x,date_from:e.target.value}))}/></label><label>Hasta<input type="date" value={filters.date_to} onChange={e=>setFilters(x=>({...x,date_to:e.target.value}))}/></label>
  <label>Estado<select value={filters.status} onChange={e=>setFilters(x=>({...x,status:e.target.value}))}><option value="">Todos</option>{['draft','pending','confirmed','in_progress','completed','cancelled'].map(s=><option key={s} value={s}>{s}</option>)}</select></label></div>
  <div className="mg-row"><button className="primary" onClick={load}>Aplicar filtros</button><a className="outline" href={ROOT+'reports/export?'+query('csv')} download>Exportar CSV</a><a className="outline" href={ROOT+'reports/export?'+query('pdf')} download>Exportar PDF</a></div>
@@ -111,8 +111,8 @@ function Reports(){
 const TABS=[['team','Equipo'],['purch','Compras'],['calendar','Calendario'],['alerts','Alertas'],['reports','Informes']];
 export default function ManagementHub({owner,orders=[]}){
  const [tab,setTab]=useState(owner?'team':'alerts');
- return <section className="panel management" aria-label="Gestión empresarial RF-023 a RF-027">
-  <div className="panel-heading"><div><h2>Centro de gestión · RF-023 a RF-027</h2><p>Colaboradores, abastecimiento, recursos, alertas e informes sobre la misma organización.</p></div></div>
+ return <section className="panel management" aria-label="Gestión empresarial">
+  <div className="panel-heading"><div><h2>Centro de gestión</h2><p>Colaboradores, abastecimiento, recursos, alertas e informes sobre la misma organización.</p></div></div>
   <div className="mg-tabs">{TABS.filter(([id])=>owner||!['team'].includes(id)).map(([id,name])=><button type="button" key={id} className={tab===id?'primary':'outline'} onClick={()=>setTab(id)}>{name}</button>)}</div>
   {tab==='team'&&owner&&<Team/>}{tab==='purch'&&<Purchasing owner={owner}/>}{tab==='calendar'&&<Calendar owner={owner} orders={orders}/>}
   {tab==='alerts'&&<Notifications/>}{tab==='reports'&&<Reports/>}

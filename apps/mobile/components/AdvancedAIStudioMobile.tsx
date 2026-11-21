@@ -1,4 +1,4 @@
-/** RIA-006..018: mobile read-only plans and human-controlled model monitoring.
+/** Mobile read-only plans and human-controlled model monitoring.
  * No app-side action confirms orders, sends messages or buys materials.
  */
 import React,{useEffect,useState} from 'react';
@@ -50,7 +50,7 @@ export default function AdvancedAIStudioMobile({call}:{call:Call}){
    {text:'Cancelar',style:'cancel'},{text:'Confirmar',onPress:()=>void run(()=>call('/ai-ops/models/'+m.id+'/'+action,'POST',{confirm:true}))}]);
  }
  return <View style={S.box}>
-  <Text style={S.heading}>IA verificable · RIA-006 a RIA-018</Text>
+  <Text style={S.heading}>IA avanzada · análisis y simulación</Text>
   <Text style={S.small}>Escenarios y agentes seguros. Solo borradores; ningún pedido, precio o compra se modifica automáticamente.</Text>
   <View style={S.row}>
    <Chip title="Escenarios" chosen={tab==='plan'} onPress={()=>{setTab('plan');setResult(null)}}/>

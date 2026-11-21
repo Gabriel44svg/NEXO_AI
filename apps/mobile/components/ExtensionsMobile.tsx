@@ -21,7 +21,7 @@ function Plans({call}:Props){
  async function load(){try{setData(await call('/subscriptions/me'))}catch(e){setMsg(String(e))}}
  useEffect(()=>{void load()},[]);
  async function trial(){try{setData(await call('/subscriptions/start-trial','POST',{}));setMsg('Prueba de 7 días activada; no se hicieron cobros.')}catch(e){setMsg(String(e))}}
- return <View style={S.card}><Text style={S.title}>RF-028 · Planes y límites</Text>
+ return <View style={S.card}><Text style={S.title}>Planes y límites</Text>
  {data&&<><Label>Plan: {data.plan} · Estado: {data.status}</Label>
  <Label>OCR {data.usage.ocr}/{data.limits.ocr} · Agentes {data.usage.agents}/{data.limits.agents}</Label>
  <Hint>El plan no bloquea pedidos ni cotizaciones. Sin facturación automática.</Hint>
@@ -45,7 +45,7 @@ function OCR({call,upload}:Props){
  async function review(){if(!selected)return;try{await call('/documents/ocr/proposals/'+selected.id+'/review','POST',{
  vendor:vendor||null,amount_mxn:amount||null,concept:concept||null,confirm:true});setMsg('Revisión humana guardada, sin crear factura.');setSelected(null);await load()
  }catch(e){setMsg(String(e))}}
- return <View style={S.card}><Text style={S.title}>RF-029 · OCR asistido</Text>
+ return <View style={S.card}><Text style={S.title}>OCR asistido</Text>
  <Hint>Selecciona una foto de factura/nota/etiqueta. Necesitas Tesseract en FastAPI; nunca crea compras o facturas automáticamente.</Hint>
  <Button label={busy?'Extrayendo texto…':'Seleccionar foto y extraer propuesta'} onPress={()=>{if(!busy)void pick()}}/>
  {rows.map(x=><View key={x.id} style={S.divider}><Button secondary label={`${x.filename} · ${x.status} · ${Math.round((x.extracted?.confidence||0)*100)}%`} onPress={()=>choose(x)}/></View>)}
@@ -64,7 +64,7 @@ function Messaging({call}:Props){
  async function register(){try{await call('/messaging/consents','POST',{recipient_e164:recipient,evidence_reference:evidence,valid_days:90,confirm:true});
  setMsg('Consentimiento registrado sin enviar mensajes');setRecipient('');setEvidence('');await load()}catch(e){setMsg(String(e))}}
  async function revoke(id:string){try{await call('/messaging/consents/'+id+'/revoke','POST',{confirm:true});setMsg('Consentimiento revocado');await load()}catch(e){setMsg(String(e))}}
- return <View style={S.card}><Text style={S.title}>RF-030 · Mensajería oficial</Text>
+ return <View style={S.card}><Text style={S.title}>Mensajería oficial</Text>
  <Hint>Solo WhatsApp Cloud API con credenciales de la empresa, consentimiento documentado y autorización explícita. Sin mensajes automáticos.</Hint>
  <Label>{config?.credentials_present?'Credenciales configuradas':'Sin credenciales oficiales del servidor'}</Label>
  <Input label="ID de número de WhatsApp Business (Meta)" value={phone} onChange={setPhone}/>
@@ -84,7 +84,7 @@ function Templates({call}:Props){
  setCatalog(c);setActive(a);setHistory(h);setCode(v=>v||c[0]?.code||'')}catch(e){setMsg(String(e))}}
  useEffect(()=>{void load()},[]);
  async function apply(){try{await call('/sector-templates/apply','POST',{code,confirm:true});setMsg('Plantilla aplicada para configuraciones futuras.');await load()}catch(e){setMsg(String(e))}}
- return <View style={S.card}><Text style={S.title}>RF-031 · Plantillas por sector</Text><Label>Actual: {active?.code||'Ninguna'}</Label>
+ return <View style={S.card}><Text style={S.title}>Plantillas por sector</Text><Label>Actual: {active?.code||'Ninguna'}</Label>
  <View style={S.row}>{catalog.map(x=><Chip key={x.code} name={x.config.name} selected={code===x.code} onPress={()=>setCode(x.code)}/>)}</View>
  <Hint>El cambio no modifica pedidos históricos, precios ni compromisos ya aceptados.</Hint>
  <Button label="Aplicar plantilla" onPress={()=>Alert.alert('Cambiar sector','¿Aplicar solo a configuraciones futuras?',
@@ -98,7 +98,7 @@ function Agents({call}:Props){
  useEffect(()=>{void load()},[]);
  async function prepare(){try{await call('/agents/prepare','POST',{agent_kind:kind,objective});setMsg('Plan preparado sin ejecutar acciones externas');await load()}catch(e){setMsg(String(e))}}
  async function authorize(id:string){try{await call('/agents/workflows/'+id+'/authorize','POST',{confirm:true});setMsg('Plan de lectura autorizado');await load()}catch(e){setMsg(String(e))}}
- return <View style={S.card}><Text style={S.title}>RF-032 · Agentes supervisados</Text>
+ return <View style={S.card}><Text style={S.title}>Agentes supervisados</Text>
  <Hint>Reglas deterministas y consultas de lectura. No usa LLM; no compra, confirma ni envía mensajes.</Hint>
  <View style={S.row}>{[['capacity_planner','Capacidad'],['material_advisor','Materiales'],['followup_drafter','Seguimiento']].map(([id,t])=><Chip key={id} name={t} selected={kind===id} onPress={()=>setKind(id)}/>)}</View>
  <Input label="Objetivo" value={objective} onChange={setObjective}/><Button label="Preparar plan sin ejecutar" onPress={()=>void prepare()}/>
@@ -110,7 +110,7 @@ function Agents({call}:Props){
 const TABS=[['plans','Planes'],['ocr','OCR'],['messages','Mensajería'],['templates','Sectores'],['agents','Agentes']] as const;
 export default function ExtensionsMobile(props:Props){
  const [tab,setTab]=useState<(typeof TABS)[number][0]>('plans');
- return <View><Text style={S.title}>Inteligencia y extensiones · RF-028 a RF-032</Text>
+ return <View><Text style={S.title}>Inteligencia y extensiones</Text>
  <View style={S.row}>{TABS.map(([key,name])=><Chip key={key} name={name} selected={tab===key} onPress={()=>setTab(key)}/>)}</View>
  {tab==='plans'&&<Plans {...props}/>}{tab==='ocr'&&<OCR {...props}/>}{tab==='messages'&&<Messaging {...props}/>}
  {tab==='templates'&&<Templates {...props}/>}{tab==='agents'&&<Agents {...props}/>}

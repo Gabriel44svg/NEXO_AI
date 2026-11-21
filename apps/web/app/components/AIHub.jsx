@@ -41,12 +41,12 @@ export default function AIHub(){
  async function refreshJobs(){setJobs(await api('transcriptions'));}
  async function saveEdited(){await run(async()=>{const x=await api('transcriptions/'+selectedJob+'/text','PATCH',{text:transcriptText,confirm:true});
  setTranscriptText(x.reviewed_text||'');await refreshJobs();setStatus('Texto humano revisado; no se creó pedido.');});}
- return <section className="panel mg-hub"><div className="panel-heading"><div><h2>Asistente IA · RIA-001 a RIA-005</h2>
+ return <section className="panel mg-hub"><div className="panel-heading"><div><h2>Asistente IA</h2>
  <p>Voz local, extracción trazable, verificación y estimación operativa. Ningún pedido se confirma automáticamente.</p></div><span className="soft-label">Revisión humana</span></div>
  <div className="mg-tabs">{[['extract','Extracción'],['voice','Transcripción'],['forecast','Pronóstico']].map(([key,label])=>
  <button key={key} className={tab===key?'primary':'outline'} type="button" onClick={()=>setTab(key)}>{label}</button>)}</div>
  <Message>{status}</Message>
- {tab==='voice'&&<Block title="RIA-001 · Transcribir voz en español" info="Primero graba y envía una nota M4A desde el iPhone. Se procesa localmente con faster-whisper; requiere motor instalado en FastAPI. Hasta 60 segundos.">
+ {tab==='voice'&&<Block title="Transcripción de voz en español" info="Primero graba y envía una nota M4A desde el iPhone. Se procesa localmente con faster-whisper; requiere motor instalado en FastAPI. Hasta 60 segundos.">
  <button className="outline" onClick={()=>void run(async()=>{await load();setStatus('Notas y transcripciones actualizadas')})}>Actualizar lista</button>
  <div className="mg-metrics">{notes.map(n=><div key={n.id}><small>{n.created_at?.slice(0,16)||'Nota de voz'} · {n.duration_ms==null?'Duración no informada':Math.round(n.duration_ms/1000)+'s'}</small>
  <button className="outline" disabled={busy||n.duration_ms>60000} onClick={()=>void startAudio(n.id)}>Transcribir {n.id.slice(0,8)}</button></div>)}</div>
@@ -61,7 +61,7 @@ export default function AIHub(){
  <div className="mg-row"><button className="primary" disabled={!transcriptText.trim()} onClick={()=>void saveEdited()}>Guardar revisión</button>
  <button className="outline" onClick={()=>{setDraft(transcriptText);setTab('extract');}}>Usar como texto para extracción</button></div></div>}
  </Block>}
- {tab==='extract'&&<Block title="RIA-002, RIA-003 y RIA-004 · Propuesta trazable" info="Extractor de reglas español (baseline, no modelo entrenado). Muestra fragmentos exactos y campos pendientes; la validación nunca confirma pedidos.">
+ {tab==='extract'&&<Block title="Extracción y revisión de datos" info="Extractor de reglas español (baseline, no modelo entrenado). Muestra fragmentos exactos y campos pendientes; la validación nunca confirma pedidos.">
  <form className="mg-form" onSubmit={extract}><label>Solicitud en español<textarea rows="4" required minLength="1" maxLength="5000" value={draft} onChange={e=>setDraft(e.target.value)}/></label>
  <button className="primary" disabled={busy}>Extraer y guardar propuesta</button></form>
  {source&&<><p className="tiny">Versión: {source.result.engine_version}; pendientes: {source.result.pending_fields.join(', ')||'ninguno'}</p>
@@ -78,7 +78,7 @@ export default function AIHub(){
  {validation.issues.map((x,i)=><p key={i}>{x.field}: {x.message}</p>)}<p className="tiny">Pedido confirmado: NO · Cambios aplicados: NO</p>
  {validation.valid&&!source.reviewed&&!reviewed&&<button type="button" className="outline" onClick={()=>{if(window.confirm('¿Guardar estos datos validados como revisión humana, sin crear ni confirmar pedidos?'))void saveReview()}}>Guardar revisión corregida</button>}</div>}</>}
  </Block>}
- {tab==='forecast'&&<Block title="RIA-005 · Estimación de cumplimiento" info="Baseline determinista con carga, cantidad, minutos por producto, recurso y asignaciones. No es una predicción estadística validada ni una promesa de entrega.">
+ {tab==='forecast'&&<Block title="Estimación de cumplimiento" info="Baseline determinista con carga, cantidad, minutos por producto, recurso y asignaciones. No es una predicción estadística validada ni una promesa de entrega.">
  <form className="mg-form" onSubmit={predict}><label>Producto<select required value={values.product_id} onChange={e=>update('product_id',e.target.value)}><option value="">Elegir</option>
  {products.map(p=><option key={p.id} value={p.id}>{p.name} ({p.unit})</option>)}</select></label>
  <div className="mg-row"><label>Cantidad<input required type="text" value={estQty} onChange={e=>setEstQty(e.target.value)}/></label>

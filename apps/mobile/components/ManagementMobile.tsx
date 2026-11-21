@@ -39,7 +39,7 @@ function Team({call}:Props){
   setMsg('Invitación válida 24 horas. Copia el token y entrégalo por un canal seguro.');setEmail('');await load();
  }catch(e){setMsg(String(e))}}
  async function suspend(id:string,active:boolean){try{await call('/collaborators/users/'+id+'/suspension','PATCH',{is_active:!active});await load()}catch(e){setMsg(String(e))}}
- return <View style={S.box}><Text style={S.heading}>RF-023 · Colaboradores</Text>
+ return <View style={S.box}><Text style={S.heading}>Colaboradores</Text>
   <Input hint="Correo electrónico" value={email} set={setEmail}/><Label>Permisos del colaborador</Label>
   <View style={S.row}>{['orders.read','orders.write','quotes.read','notifications.read','reports.read','calendar.read','purchasing.read','purchasing.write'].map(v=><Pressable key={v}
   style={[S.chip,perms.includes(v)&&S.chipOn]} onPress={()=>setPerms(p=>p.includes(v)?p.filter(x=>x!==v):[...p,v])}><Text style={S.text}>{perms.includes(v)?'☑':'☐'} {v}</Text></Pressable>)}</View>
@@ -58,7 +58,7 @@ function Purchasing({call}:Props){
  async function addSupplier(){try{await call('/purchasing/suppliers','POST',{code,name});setCode('');setName('');await load()}catch(e){setMsg(String(e))}}
  async function addRequest(){try{await call('/purchasing/requests','POST',{supplier_id:supplier,material_id:material,quantity:qty,unit_cost_mxn:cost});setQty('');await load();setMsg('Solicitud pendiente de aprobación')}catch(e){setMsg(String(e))}}
  async function decide(id:string,decision:'approve'|'reject'){try{await call('/purchasing/requests/'+id+'/decision','POST',{decision,note:'Decisión explícita del propietario'});await load()}catch(e){setMsg(String(e))}}
- return <View style={S.box}><Text style={S.heading}>RF-024 · Compras</Text>
+ return <View style={S.box}><Text style={S.heading}>Compras</Text>
  <Input hint="Código proveedor" value={code} set={setCode}/><Input hint="Nombre proveedor" value={name} set={setName}/>
  <Btn title="Crear proveedor" onPress={()=>void addSupplier()}/><Label>Selecciona proveedor</Label><View style={S.row}>{suppliers.map(s=><Pressable key={s.id} style={[S.chip,supplier===s.id&&S.chipOn]} onPress={()=>setSupplier(s.id)}><Text style={S.text}>{s.name}</Text></Pressable>)}</View>
  <Label>Selecciona material</Label><View style={S.row}>{materials.map(m=><Pressable key={m.id} style={[S.chip,material===m.id&&S.chipOn]} onPress={()=>setMaterial(m.id)}><Text style={S.text}>{m.name}</Text></Pressable>)}</View>
@@ -74,7 +74,7 @@ function Calendar({call}:Props){
  setOrders(o.items||[]);setResource(x=>x||d.resources[0]?.resource_id||'')}catch(e){setMsg(String(e))}}
  useEffect(()=>{void load()},[day]);
  async function allocate(){try{await call('/scheduling/allocations','POST',{resource_id:resource,order_id:order,day,quantity:qty});setMsg('Carga registrada');await load()}catch(e){setMsg(String(e))}}
- return <View style={S.box}><Text style={S.heading}>RF-025 · Calendario de carga</Text>
+ return <View style={S.box}><Text style={S.heading}>Calendario de carga</Text>
  <Input hint="Fecha AAAA-MM-DD" value={day} set={setDay}/><Btn title="Consultar calendario" secondary onPress={()=>void load()}/>
  {rows.map(r=><View key={r.resource_id} style={S.border}><Label>{r.resource_name}</Label><Label>{r.occupied} / {r.capacity} {r.unit} · restantes {r.remaining}</Label><Text style={S.tiny}>{r.working?'Laborable':'No laborable o bloqueado'}</Text></View>)}
  <Label>Recurso</Label><View style={S.row}>{rows.map(r=><Pressable key={r.resource_id} style={[S.chip,resource===r.resource_id&&S.chipOn]} onPress={()=>setResource(r.resource_id)}><Text style={S.text}>{r.resource_name}</Text></Pressable>)}</View>
@@ -89,7 +89,7 @@ function Alerts({call}:Props){
  async function save(){try{await call('/notifications/preferences','PUT',prefs);setMsg('Preferencias guardadas')}catch(e){setMsg(String(e))}}
  async function scan(){try{const r=await call('/notifications/scan','POST',{});setMsg(`${r.created} alertas nuevas`);await load()}catch(e){setMsg(String(e))}}
  const labels={due_soon:'Fecha próxima',risk:'Entrega vencida',material_shortage:'Material insuficiente'};
- return <View style={S.box}><Text style={S.heading}>RF-026 · Notificaciones</Text><View style={S.row}>{(Object.keys(labels) as (keyof typeof labels)[]).map(k=><Pressable key={k}
+ return <View style={S.box}><Text style={S.heading}>Notificaciones</Text><View style={S.row}>{(Object.keys(labels) as (keyof typeof labels)[]).map(k=><Pressable key={k}
   style={[S.chip,prefs[k]&&S.chipOn]} onPress={()=>setPrefs(p=>({...p,[k]:!p[k]}))}><Text style={S.text}>{prefs[k]?'☑':'☐'} {labels[k]}</Text></Pressable>)}</View>
   <Btn title="Guardar preferencias" onPress={()=>void save()}/><Btn title="Evaluar alertas" secondary onPress={()=>void scan()}/>{entries.map(e=><View key={e.id} style={S.border}><Label>{e.kind}: {e.message}</Label></View>)}
  {!!msg&&<Label>{msg}</Label>}<Text style={S.tiny}>Alertas internas bajo demanda, no notificaciones push.</Text></View>;
@@ -109,7 +109,7 @@ function Reports({call,token}:Props){
    else await file.preview({title:'Informe NEXO AI'});
    setMsg('Informe generado.');
   }catch(e){setMsg(String(e))}}
- return <View style={S.box}><Text style={S.heading}>RF-027 · Informes</Text>
+ return <View style={S.box}><Text style={S.heading}>Informes</Text>
  <Input hint="Desde AAAA-MM-DD (opcional)" value={from} set={setFrom}/><Input hint="Hasta AAAA-MM-DD (opcional)" value={to} set={setTo}/>
  <View style={S.row}>{['','draft','pending','confirmed','in_progress','completed','cancelled'].map(s=><Pressable key={s} style={[S.chip,status===s&&S.chipOn]} onPress={()=>setStatus(s)}><Text style={S.text}>{s||'Todos'}</Text></Pressable>)}</View>
  <Btn title="Consultar totales" onPress={()=>void load()}/>{data&&<><Label>Pedidos {data.totals.orders} · completados {data.totals.completed}</Label>
@@ -120,7 +120,7 @@ function Reports({call,token}:Props){
 const tabs=['Equipo','Compras','Calendario','Alertas','Informes'] as const;
 export default function ManagementMobile({call,token}:Props){
  const [tab,setTab]=useState<(typeof tabs)[number]>('Alertas');
- return <View><Text style={S.heading}>Gestión empresarial · RF-023 a RF-027</Text>
+ return <View><Text style={S.heading}>Gestión empresarial</Text>
  <View style={S.row}>{tabs.map(v=><Pressable key={v} style={[S.chip,tab===v&&S.chipOn]} onPress={()=>setTab(v)}><Text style={S.text}>{v}</Text></Pressable>)}</View>
  {tab==='Equipo'&&<Team call={call} token={token}/>}{tab==='Compras'&&<Purchasing call={call} token={token}/>}
  {tab==='Calendario'&&<Calendar call={call} token={token}/>}{tab==='Alertas'&&<Alerts call={call} token={token}/>}
