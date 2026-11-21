@@ -30,6 +30,8 @@ from app.modules.extensions import model as extensions_model  # noqa: F401 RF-02
 
 from app.modules.ai import model as ai_model  # noqa: F401 RIA-001..RIA-005
 
+from app.modules.ai_ops import model as ai_ops_model  # noqa: F401 RIA-006..RIA-018
+
 config = context.config
 target_metadata = Base.metadata
 

@@ -12,6 +12,7 @@ import * as Sharing from 'expo-sharing';
 import ManagementMobile,{JoinInviteMobile} from './components/ManagementMobile';
 import ExtensionsMobile from './components/ExtensionsMobile';
 import AIStudioMobile from './components/AIStudioMobile';
+import AdvancedAIStudioMobile from './components/AdvancedAIStudioMobile';
 import { fetch as expoFetch } from 'expo/fetch';
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? '').replace(/\/+$/, '');
@@ -158,7 +159,7 @@ export default function App() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [token, setToken] = useState<string | null>(null);
-  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim' | 'manage' | 'extensions' | 'ai'>('voice');
+  const [tab, setTab] = useState<'voice' | 'text' | 'review' | 'search' | 'quote' | 'sim' | 'manage' | 'extensions' | 'ai' | 'advanced_ai'>('voice');
   const [micDenied, setMicDenied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -863,6 +864,9 @@ export default function App() {
                 <Pressable onPress={() => setTab('ai')} style={[styles.tab, tab === 'ai' && styles.tabActive]}>
                   <Text style={styles.tabText}>Asistente IA</Text>
                 </Pressable>
+                <Pressable onPress={() => setTab('advanced_ai')} style={[styles.tab, tab === 'advanced_ai' && styles.tabActive]}>
+                  <Text style={styles.tabText}>IA avanzada</Text>
+                </Pressable>
                 <Pressable onPress={() => setTab('extensions')} style={[styles.tab, tab === 'extensions' && styles.tabActive]}>
                   <Text style={styles.tabText}>IA y extras</Text>
                 </Pressable>
@@ -872,6 +876,10 @@ export default function App() {
               </View>
               {tab === 'ai' ? (
                 <AIStudioMobile call={(path,method='GET',body)=>apiRequest(path,{
+                  method,headers:{...auth,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
+                })}/>
+              ) : tab === 'advanced_ai' ? (
+                <AdvancedAIStudioMobile call={(path,method='GET',body)=>apiRequest(path,{
                   method,headers:{...auth,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined
                 })}/>
               ) : tab === 'extensions' ? (

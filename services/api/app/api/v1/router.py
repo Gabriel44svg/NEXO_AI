@@ -75,3 +75,7 @@ for ext_router in (subscription_router, ocr_router, messaging_router, sector_tem
 # RIA-001..RIA-005: transcription, extraction, validation, provenance, baseline estimates
 from app.modules.ai.router import router as ai_router
 api_router.include_router(ai_router)
+
+# RIA-006..RIA-018: evaluation, optimization, agent guard, governance, twin
+from app.modules.ai_ops.router import router as advanced_ai_router
+api_router.include_router(advanced_ai_router)
