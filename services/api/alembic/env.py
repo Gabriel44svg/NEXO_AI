@@ -26,6 +26,8 @@ from app.modules.purchasing import model as purchasing_model  # noqa: F401
 from app.modules.scheduling import model as scheduling_model  # noqa: F401
 from app.modules.notifications import model as notifications_model  # noqa: F401
 
+from app.modules.extensions import model as extensions_model  # noqa: F401 RF-028..RF-032
+
 config = context.config
 target_metadata = Base.metadata
 

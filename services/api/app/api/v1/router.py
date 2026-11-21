@@ -62,3 +62,12 @@ api_router.include_router(purchasing_router)
 api_router.include_router(scheduling_router)
 api_router.include_router(notifications_router)
 api_router.include_router(reports_router)
+
+# RF-028–RF-032: planes, OCR, mensajería, plantillas y agentes supervisados
+from app.modules.extensions.subscriptions import router as subscription_router
+from app.modules.extensions.ocr import router as ocr_router
+from app.modules.extensions.messaging import router as messaging_router
+from app.modules.extensions.templates import router as sector_templates_router
+from app.modules.extensions.agents import router as agent_router
+for ext_router in (subscription_router, ocr_router, messaging_router, sector_templates_router, agent_router):
+    api_router.include_router(ext_router)
